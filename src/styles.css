@@ -663,6 +663,31 @@ kbd {
   text-align: right;
 }
 
+.smooth-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 23px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--dim);
+  font-size: 8px;
+  font-weight: 750;
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+.smooth-toggle:hover {
+  color: var(--text);
+  border-color: var(--line-bright);
+}
+
+.smooth-toggle.is-on {
+  color: var(--mint-bright);
+  border-color: rgba(62, 230, 196, 0.36);
+  background: rgba(62, 230, 196, 0.1);
+}
+
 .inbetween-pill {
   position: absolute;
   top: 13px;
@@ -1513,6 +1538,25 @@ kbd {
 
 .text-fields .range-row {
   margin-top: 4px;
+}
+
+.multi-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  padding: 8px 9px;
+  border: 1px solid rgba(62, 230, 196, 0.15);
+  border-radius: 8px;
+  background: rgba(62, 230, 196, 0.05);
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.4;
+}
+
+.multi-hint svg {
+  flex: 0 0 auto;
+  color: var(--mint);
 }
 
 .geometry-row {

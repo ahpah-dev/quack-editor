@@ -39,7 +39,7 @@ export default function Welcome({ open, onStart, onDemo }: WelcomeProps) {
           <div className="welcome-duck">
             <DuckMark size={76} />
           </div>
-          <span className="eyebrow">Quack Editor · 1.0</span>
+          <span className="eyebrow">Quack Editor · 1.1</span>
           <h1>Quack. Make<br /><em>something move.</em></h1>
           <p>
             A tiny motion studio with one big trick: draw two moments and Quack

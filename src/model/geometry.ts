@@ -187,6 +187,49 @@ export function hitTestObject(object: ShapeObject, point: Point, tolerance = 8):
   return false;
 }
 
+export function boundsIntersect(a: Bounds, b: Bounds): boolean {
+  return (
+    a.x <= b.x + b.width &&
+    a.x + a.width >= b.x &&
+    a.y <= b.y + b.height &&
+    a.y + a.height >= b.y
+  );
+}
+
+export function unionBounds(boundsList: Bounds[]): Bounds {
+  if (!boundsList.length) return { x: 0, y: 0, width: 0, height: 0 };
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const bounds of boundsList) {
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.width);
+    maxY = Math.max(maxY, bounds.y + bounds.height);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+export function smoothPolyline(points: Point[], iterations = 2): Point[] {
+  if (points.length < 3) return points.map(point => ({ ...point }));
+  let current = points.map(point => ({ ...point }));
+  const rounds = Math.max(1, Math.min(3, iterations));
+  for (let round = 0; round < rounds; round++) {
+    if (current.length < 3) break;
+    const next: Point[] = [{ ...current[0] }];
+    for (let index = 0; index < current.length - 1; index++) {
+      const a = current[index];
+      const b = current[index + 1];
+      next.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
+      next.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+    }
+    next.push({ ...current[current.length - 1] });
+    current = next;
+  }
+  return current;
+}
+
 export function transformPoints(points: Point[], dx: number, dy: number): Point[] {
   return points.map(point => ({ x: point.x + dx, y: point.y + dy }));
 }

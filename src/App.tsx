@@ -82,7 +82,10 @@ export default function App() {
   const [strokeColor, setStrokeColor] = useState('#0d4a3d');
   const [strokeWidth, setStrokeWidth] = useState(8);
   const [currentFrame, setCurrentFrame] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [smoothDrawing, setSmoothDrawing] = useState(
+    () => localStorage.getItem('quack.smoothDrawing.v1') !== 'false',
+  );
   const [playing, setPlaying] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(() => localStorage.getItem(WELCOME_KEY) !== 'yes');
   const [exportOpen, setExportOpen] = useState(false);
@@ -99,8 +102,9 @@ export default function App() {
   const duration = projectDuration(project);
   const activeKeyframe = keyframeAt(project, currentFrame);
   const scene = useMemo(() => sceneAt(project, currentFrame), [project, currentFrame]);
-  const selectedObject =
-    activeKeyframe?.objects.find(object => object.id === selectedId) || null;
+  const selectedObjects = activeKeyframe
+    ? activeKeyframe.objects.filter(object => selectedIds.includes(object.id))
+    : [];
   const canAdd = sceneHasContent(scene);
 
   const notify = useCallback((message: string, tone: Notice['tone'] = 'mint') => {
@@ -140,10 +144,19 @@ export default function App() {
   }, [currentFrame, duration]);
 
   useEffect(() => {
-    if (selectedId && !activeKeyframe?.objects.some(object => object.id === selectedId)) {
-      setSelectedId(null);
+    if (!activeKeyframe) {
+      if (selectedIds.length) setSelectedIds([]);
+      return;
     }
-  }, [activeKeyframe, selectedId]);
+    const valid = selectedIds.filter(id =>
+      activeKeyframe.objects.some(object => object.id === id),
+    );
+    if (valid.length !== selectedIds.length) setSelectedIds(valid);
+  }, [activeKeyframe, selectedIds]);
+
+  useEffect(() => {
+    localStorage.setItem('quack.smoothDrawing.v1', String(smoothDrawing));
+  }, [smoothDrawing]);
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -170,7 +183,7 @@ export default function App() {
   };
 
   const togglePlay = () => {
-    setSelectedId(null);
+    setSelectedIds([]);
     if (!playing && currentFrame >= duration) setCurrentFrame(1);
     setPlaying(value => !value);
   };
@@ -191,7 +204,7 @@ export default function App() {
     }));
     setPlaying(false);
     setCurrentFrame(target);
-    setSelectedId(null);
+    setSelectedIds([]);
     const inbetweens = Math.max(0, target - currentFrame - 1);
     notify(
       project.autoTween
@@ -209,7 +222,7 @@ export default function App() {
       ...draft,
       keyframes: [...draft.keyframes, keyframe].sort((a, b) => a.at - b.at),
     }));
-    setSelectedId(null);
+    setSelectedIds([]);
     notify(`Pinned keyframe ${currentFrame}.`, 'mint');
   };
 
@@ -224,7 +237,7 @@ export default function App() {
     const previous = remaining
       .filter(keyframe => keyframe.at < activeKeyframe.at)
       .sort((a, b) => b.at - a.at)[0];
-    setSelectedId(null);
+    setSelectedIds([]);
     setCurrentFrame(previous?.at || remaining[0].at);
     notify(`Keyframe ${activeKeyframe.at} removed.`, 'ink');
   };
@@ -234,12 +247,13 @@ export default function App() {
   };
 
   const updateSelected = (patch: Partial<ShapeObject>) => {
-    if (!activeKeyframe || !selectedId) return;
+    if (!activeKeyframe || !selectedIds.length) return;
+    const selected = new Set(selectedIds);
     commit(draft =>
       updateKeyframe(draft, activeKeyframe.id, keyframe => ({
         ...keyframe,
         objects: keyframe.objects.map(object =>
-          object.id === selectedId ? { ...object, ...patch } : object,
+          selected.has(object.id) ? { ...object, ...patch } : object,
         ),
       })),
     );
@@ -253,19 +267,22 @@ export default function App() {
         objects: [...keyframe.objects, object],
       })),
     );
-    setSelectedId(object.id);
+    setSelectedIds([object.id]);
     if (object.kind === 'text') {
       setTool('select');
     }
   };
 
-  const updateObjectPoints = (id: string, points: ShapeObject['points']) => {
-    if (!activeKeyframe) return;
+  const updateObjectsPoints = (
+    updates: Array<{ id: string; points: ShapeObject['points'] }>,
+  ) => {
+    if (!activeKeyframe || !updates.length) return;
+    const byId = new Map(updates.map(update => [update.id, update.points]));
     updateLive(draft =>
       updateKeyframe(draft, activeKeyframe.id, keyframe => ({
         ...keyframe,
         objects: keyframe.objects.map(object =>
-          object.id === id ? { ...object, points } : object,
+          byId.has(object.id) ? { ...object, points: byId.get(object.id)! } : object,
         ),
       })),
     );
@@ -279,37 +296,48 @@ export default function App() {
         objects: keyframe.objects.filter(object => object.id !== id),
       })),
     );
-    if (selectedId === id) setSelectedId(null);
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(item => item !== id));
     notify('Shape removed.', 'ink');
   };
 
   const duplicateSelected = () => {
-    if (!activeKeyframe || !selectedObject) return;
-    const copy: ShapeObject = {
+    if (!activeKeyframe || !selectedObjects.length) return;
+    const copies: ShapeObject[] = selectedObjects.map(selectedObject => ({
       ...selectedObject,
       id: uid(selectedObject.kind),
       points: selectedObject.points.map(point => ({ x: point.x + 24, y: point.y + 24 })),
-    };
+    }));
     commit(draft =>
       updateKeyframe(draft, activeKeyframe.id, keyframe => ({
         ...keyframe,
-        objects: [...keyframe.objects, copy],
+        objects: [...keyframe.objects, ...copies],
       })),
     );
-    setSelectedId(copy.id);
+    setSelectedIds(copies.map(copy => copy.id));
+    notify(`${copies.length} shape${copies.length === 1 ? '' : 's'} duplicated.`, 'mint');
   };
 
   const deleteSelected = () => {
-    if (selectedId) deleteObject(selectedId);
+    if (!activeKeyframe || !selectedIds.length) return;
+    const selected = new Set(selectedIds);
+    commit(draft =>
+      updateKeyframe(draft, activeKeyframe.id, keyframe => ({
+        ...keyframe,
+        objects: keyframe.objects.filter(object => !selected.has(object.id)),
+      })),
+    );
+    setSelectedIds([]);
+    notify(`${selectedIds.length} shape${selectedIds.length === 1 ? '' : 's'} removed.`, 'ink');
   };
 
   const nudgeSelected = (dx: number, dy: number) => {
-    if (!selectedObject || !activeKeyframe) return;
+    if (!selectedObjects.length || !activeKeyframe) return;
+    const selected = new Set(selectedIds);
     commit(draft =>
       updateKeyframe(draft, activeKeyframe.id, keyframe => ({
         ...keyframe,
         objects: keyframe.objects.map(object =>
-          object.id === selectedObject.id
+          selected.has(object.id)
             ? {
                 ...object,
                 points: object.points.map(point => ({ x: point.x + dx, y: point.y + dy })),
@@ -323,7 +351,7 @@ export default function App() {
   const performUndo = () => {
     if (undo()) {
       setPlaying(false);
-      setSelectedId(null);
+      setSelectedIds([]);
     } else {
       notify('Nothing to undo yet.', 'amber');
     }
@@ -332,7 +360,7 @@ export default function App() {
   const performRedo = () => {
     if (redo()) {
       setPlaying(false);
-      setSelectedId(null);
+      setSelectedIds([]);
     } else {
       notify('Nothing to redo.', 'amber');
     }
@@ -341,7 +369,7 @@ export default function App() {
   const newProject = () => {
     replaceProject(createEmptyProject());
     setCurrentFrame(1);
-    setSelectedId(null);
+    setSelectedIds([]);
     setPlaying(false);
     setNewOpen(false);
     setTool('brush');
@@ -351,7 +379,7 @@ export default function App() {
   const loadDemo = () => {
     replaceProject(createDemoProject());
     setCurrentFrame(1);
-    setSelectedId(null);
+    setSelectedIds([]);
     setPlaying(false);
     closeWelcome();
     setTool('select');
@@ -364,7 +392,7 @@ export default function App() {
       const parsed = parseProjectFile(text);
       replaceProject(parsed);
       setCurrentFrame(1);
-      setSelectedId(null);
+      setSelectedIds([]);
       setPlaying(false);
       notify(`Opened ${file.name}.`, 'mint');
     } catch (error) {
@@ -480,6 +508,13 @@ export default function App() {
         duplicateSelected();
         return;
       }
+      if (command && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        if (activeKeyframe) {
+          setSelectedIds(activeKeyframe.objects.map(object => object.id));
+        }
+        return;
+      }
 
       if (event.code === 'Space') {
         event.preventDefault();
@@ -488,7 +523,7 @@ export default function App() {
       }
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (selectedId) {
+        if (selectedIds.length) {
           event.preventDefault();
           deleteSelected();
         }
@@ -496,13 +531,13 @@ export default function App() {
       }
 
       if (event.key.startsWith('Arrow')) {
-        if (event.key === 'ArrowLeft' && !selectedId) {
+        if (event.key === 'ArrowLeft' && !selectedIds.length) {
           event.preventDefault();
           selectFrame(currentFrame - 1);
-        } else if (event.key === 'ArrowRight' && !selectedId) {
+        } else if (event.key === 'ArrowRight' && !selectedIds.length) {
           event.preventDefault();
           selectFrame(currentFrame + 1);
-        } else if (selectedId) {
+        } else if (selectedIds.length) {
           event.preventDefault();
           const amount = event.shiftKey ? 10 : 1;
           if (event.key === 'ArrowLeft') nudgeSelected(-amount, 0);
@@ -514,7 +549,7 @@ export default function App() {
       }
 
       if (event.key === 'Escape') {
-        setSelectedId(null);
+        setSelectedIds([]);
         setPlaying(false);
         setControlsOpen(false);
         return;
@@ -574,16 +609,19 @@ export default function App() {
             tool={tool}
             setTool={setTool}
             editable={!!activeKeyframe}
-            selectedObject={selectedObject}
+            selectedIds={selectedIds}
+            selectedObjects={selectedObjects}
             fillColor={fillColor}
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
+            smoothDrawing={smoothDrawing}
             onFillColorChange={setFillColor}
             onStrokeColorChange={setStrokeColor}
             onStrokeWidthChange={setStrokeWidth}
-            onSelectObject={setSelectedId}
+            onSmoothDrawingChange={setSmoothDrawing}
+            onSelectionChange={setSelectedIds}
             onCreateObject={createObject}
-            onUpdateObjectPoints={updateObjectPoints}
+            onUpdateObjectsPoints={updateObjectsPoints}
             onBeginEdit={beginTransaction}
             onEndEdit={endTransaction}
             onDeleteObject={deleteObject}
@@ -613,7 +651,7 @@ export default function App() {
           project={project}
           frame={currentFrame}
           activeKeyframe={activeKeyframe}
-          selectedObject={selectedObject}
+          selectedObjects={selectedObjects}
           fillColor={fillColor}
           strokeColor={strokeColor}
           onFillColorChange={setFillColor}

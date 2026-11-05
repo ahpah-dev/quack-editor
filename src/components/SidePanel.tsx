@@ -1,6 +1,6 @@
 import type { Project, ShapeObject } from '../types';
 import { toHex } from '../model/colors';
-import { objectBounds } from '../model/geometry';
+import { objectBounds, unionBounds } from '../model/geometry';
 import { Icon } from './Icons';
 
 interface SidePanelProps {
@@ -8,7 +8,7 @@ interface SidePanelProps {
   project: Project;
   frame: number;
   activeKeyframe: { id: string; at: number; objects: ShapeObject[] } | null;
-  selectedObject: ShapeObject | null;
+  selectedObjects: ShapeObject[];
   fillColor: string;
   strokeColor: string;
   onFillColorChange: (color: string) => void;
@@ -102,7 +102,7 @@ export default function SidePanel(props: SidePanelProps) {
     project,
     frame,
     activeKeyframe,
-    selectedObject,
+    selectedObjects,
     fillColor,
     strokeColor,
     onFillColorChange,
@@ -118,7 +118,12 @@ export default function SidePanel(props: SidePanelProps) {
   } = props;
 
   const nextFrame = Math.min(999, frame + project.gap);
-  const bounds = selectedObject ? objectBounds(selectedObject) : null;
+  const selectedObject = selectedObjects[0] || null;
+  const selectionCount = selectedObjects.length;
+  const multi = selectionCount > 1;
+  const bounds = selectedObjects.length
+    ? unionBounds(selectedObjects.map(object => objectBounds(object)))
+    : null;
 
   return (
     <aside className={`side-panel ${className || ''}`} aria-label="Studio controls">
@@ -184,14 +189,21 @@ export default function SidePanel(props: SidePanelProps) {
       {selectedObject && activeKeyframe ? (
         <section className="panel-card style-card">
           <div className="card-heading">
-            <span className="card-icon"><Icon name={selectedObject.kind === 'text' ? 'text' : 'brush'} size={16} /></span>
+            <span className="card-icon"><Icon name={multi ? 'select' : selectedObject.kind === 'text' ? 'text' : 'brush'} size={16} /></span>
             <div>
-              <h2>{selectedObject.kind === 'text' ? 'Text' : 'Shape'}</h2>
-              <p>{Math.round(bounds?.width || 0)} × {Math.round(bounds?.height || 0)} px</p>
+              <h2>{multi ? `${selectionCount} parts selected` : selectedObject.kind === 'text' ? 'Text' : 'Shape'}</h2>
+              <p>{multi ? 'Styles apply to the whole selection.' : `${Math.round(bounds?.width || 0)} × ${Math.round(bounds?.height || 0)} px`}</p>
             </div>
           </div>
 
-          {selectedObject.kind === 'text' && (
+          {multi && (
+            <div className="multi-hint">
+              <Icon name="select" size={14} />
+              Drag to move the group. Shift-click to add or remove parts.
+            </div>
+          )}
+
+          {!multi && selectedObject.kind === 'text' && (
             <div className="text-fields">
               <label>
                 <span>Words</span>
@@ -274,10 +286,10 @@ export default function SidePanel(props: SidePanelProps) {
 
           <div className="style-actions">
             <button type="button" className="soft-btn" onClick={onDuplicateSelected}>
-              <Icon name="copy" size={14} /> Duplicate
+              <Icon name="copy" size={14} /> {multi ? 'Duplicate all' : 'Duplicate'}
             </button>
             <button type="button" className="soft-btn soft-btn--danger" onClick={onDeleteSelected}>
-              <Icon name="trash" size={14} /> Delete
+              <Icon name="trash" size={14} /> {multi ? 'Delete all' : 'Delete'}
             </button>
           </div>
         </section>
@@ -400,7 +412,7 @@ export default function SidePanel(props: SidePanelProps) {
       <footer className="panel-footer">
         <span className="footer-duck">Q</span>
         <span>
-          Quack Editor <strong>1.0</strong><br />
+          Quack Editor <strong>1.1</strong><br />
           <small>From scratch · Unlicense</small>
         </span>
         <a

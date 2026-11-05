@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bounds, Point, Project, ShapeObject, Tool } from '../types';
 import {
+  boundsIntersect,
   boundsOfPoints,
   clamp,
   createEllipse,
@@ -10,8 +11,10 @@ import {
   hitTestObject,
   objectBounds,
   scalePointsAround,
+  smoothPolyline,
   transformPoints,
   uid,
+  unionBounds,
 } from '../model/geometry';
 import { drawSceneObjects, drawShape } from '../model/render';
 import { Icon } from './Icons';
@@ -24,16 +27,19 @@ interface CanvasStageProps {
   tool: Tool;
   setTool: (tool: Tool) => void;
   editable: boolean;
-  selectedObject: ShapeObject | null;
+  selectedIds: string[];
+  selectedObjects: ShapeObject[];
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;
+  smoothDrawing: boolean;
   onFillColorChange: (color: string) => void;
   onStrokeColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
-  onSelectObject: (id: string | null) => void;
+  onSmoothDrawingChange: (smooth: boolean) => void;
+  onSelectionChange: (ids: string[]) => void;
   onCreateObject: (object: ShapeObject) => void;
-  onUpdateObjectPoints: (id: string, points: Point[]) => void;
+  onUpdateObjectsPoints: (updates: Array<{ id: string; points: Point[] }>) => void;
   onBeginEdit: () => void;
   onEndEdit: () => void;
   onDeleteObject: (id: string) => void;
@@ -57,16 +63,22 @@ type Interaction =
   | {
       mode: 'move';
       start: Point;
-      originals: Point[];
-      startObject: ShapeObject;
+      originals: Array<{ id: string; points: Point[] }>;
       moved: boolean;
     }
   | {
       mode: 'resize';
       handle: Handle;
-      originals: Point[];
+      originals: Array<{ id: string; points: Point[] }>;
       bounds: Bounds;
       moved: boolean;
+    }
+  | {
+      mode: 'marquee';
+      start: Point;
+      current: Point;
+      base: string[];
+      additive: boolean;
     }
   | null;
 
@@ -173,16 +185,19 @@ export default function CanvasStage(props: CanvasStageProps) {
     scene,
     tool,
     editable,
-    selectedObject,
+    selectedIds,
+    selectedObjects,
     fillColor,
     strokeColor,
     strokeWidth,
+    smoothDrawing,
     onFillColorChange,
     onStrokeColorChange,
     onStrokeWidthChange,
-    onSelectObject,
+    onSmoothDrawingChange,
+    onSelectionChange,
     onCreateObject,
-    onUpdateObjectPoints,
+    onUpdateObjectsPoints,
     onBeginEdit,
     onEndEdit,
     onDeleteObject,
@@ -197,6 +212,10 @@ export default function CanvasStage(props: CanvasStageProps) {
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [pointer, setPointer] = useState<Point | null>(null);
   const [preview, setPreview] = useState<ShapeObject | null>(null);
+  const [marquee, setMarquee] = useState<{
+    start: Point;
+    current: Point;
+  } | null>(null);
 
   useEffect(() => {
     setZoom(1);
@@ -245,19 +264,25 @@ export default function CanvasStage(props: CanvasStageProps) {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
+  const selectionBounds = useMemo(() => {
+    if (!selectedObjects.length) return null;
+    return unionBounds(selectedObjects.map(object => objectBounds(object)));
+  }, [selectedObjects]);
+
   const selectionScreen = useMemo(() => {
-    if (!selectedObject) return null;
-    const bounds = objectBounds(selectedObject);
+    if (!selectionBounds) return null;
     return {
-      x: view.x + bounds.x * view.scale,
-      y: view.y + bounds.y * view.scale,
-      width: bounds.width * view.scale,
-      height: bounds.height * view.scale,
+      x: view.x + selectionBounds.x * view.scale,
+      y: view.y + selectionBounds.y * view.scale,
+      width: selectionBounds.width * view.scale,
+      height: selectionBounds.height * view.scale,
     };
-  }, [selectedObject, view]);
+  }, [selectionBounds, view]);
+
+  const canResize = selectedObjects.length > 0 && selectedObjects.every(object => object.kind !== 'text');
 
   const handlePoints = useMemo(() => {
-    if (!selectionScreen) return [];
+    if (!selectionScreen || !canResize) return [];
     const pad = 7;
     const left = selectionScreen.x - pad;
     const top = selectionScreen.y - pad;
@@ -269,17 +294,17 @@ export default function CanvasStage(props: CanvasStageProps) {
       { handle: 'sw' as Handle, point: { x: left, y: bottom } },
       { handle: 'se' as Handle, point: { x: right, y: bottom } },
     ];
-  }, [selectionScreen]);
+  }, [canResize, selectionScreen]);
 
   const hitHandle = useCallback(
     (screen: Point): Handle | null => {
-      if (!editable || !selectedObject || selectedObject.kind === 'text') return null;
+      if (!editable || !canResize) return null;
       for (const handle of handlePoints) {
         if (distance(screen, handle.point) <= 12) return handle.handle;
       }
       return null;
     },
-    [editable, handlePoints, selectedObject],
+    [canResize, editable, handlePoints],
   );
 
   const topObjectAt = useCallback(
@@ -345,9 +370,23 @@ export default function CanvasStage(props: CanvasStageProps) {
       project.height * view.scale - 1,
     );
 
-    if (selectedObject && editable && selectionScreen) {
+    if (selectedObjects.length && editable && selectionScreen) {
       const pad = 7;
       ctx.save();
+      if (selectedObjects.length > 1) {
+        ctx.strokeStyle = 'rgba(87, 245, 210, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        for (const object of selectedObjects) {
+          const bounds = objectBounds(object);
+          ctx.strokeRect(
+            view.x + bounds.x * view.scale,
+            view.y + bounds.y * view.scale,
+            bounds.width * view.scale,
+            bounds.height * view.scale,
+          );
+        }
+      }
       ctx.strokeStyle = '#57f5d2';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
@@ -361,28 +400,52 @@ export default function CanvasStage(props: CanvasStageProps) {
       );
       ctx.restore();
 
-      if (selectedObject.kind !== 'text') {
-        for (const handle of handlePoints) {
-          ctx.fillStyle = '#eafff9';
-          ctx.strokeStyle = '#0b332a';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.rect(handle.point.x - 4.5, handle.point.y - 4.5, 9, 9);
-          ctx.fill();
-          ctx.stroke();
-        }
+      for (const handle of handlePoints) {
+        ctx.fillStyle = '#eafff9';
+        ctx.strokeStyle = '#0b332a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(handle.point.x - 4.5, handle.point.y - 4.5, 9, 9);
+        ctx.fill();
+        ctx.stroke();
       }
+    }
+
+    if (marquee) {
+      const x = Math.min(marquee.start.x, marquee.current.x);
+      const y = Math.min(marquee.start.y, marquee.current.y);
+      const width = Math.abs(marquee.current.x - marquee.start.x);
+      const height = Math.abs(marquee.current.y - marquee.start.y);
+      ctx.save();
+      ctx.fillStyle = 'rgba(62, 230, 196, 0.08)';
+      ctx.strokeStyle = '#57f5d2';
+      ctx.lineWidth = 1.25;
+      ctx.setLineDash([5, 4]);
+      ctx.fillRect(
+        view.x + x * view.scale,
+        view.y + y * view.scale,
+        width * view.scale,
+        height * view.scale,
+      );
+      ctx.strokeRect(
+        view.x + x * view.scale,
+        view.y + y * view.scale,
+        width * view.scale,
+        height * view.scale,
+      );
+      ctx.restore();
     }
   }, [
     editable,
     frame,
     handlePoints,
+    marquee,
     preview,
     project.background,
     project.height,
     project.width,
     scene,
-    selectedObject,
+    selectedObjects,
     selectionScreen,
     size.height,
     size.width,
@@ -407,14 +470,16 @@ export default function CanvasStage(props: CanvasStageProps) {
 
     if (tool === 'select') {
       const handle = hitHandle(screen);
-      if (handle && selectedObject) {
-        const bounds = objectBounds(selectedObject);
+      if (handle && selectionBounds && selectedObjects.length) {
         onBeginEdit();
         interactionRef.current = {
           mode: 'resize',
           handle,
-          originals: selectedObject.points.map(item => ({ ...item })),
-          bounds,
+          originals: selectedObjects.map(object => ({
+            id: object.id,
+            points: object.points.map(item => ({ ...item })),
+          })),
+          bounds: selectionBounds,
           moved: false,
         };
         return;
@@ -422,18 +487,38 @@ export default function CanvasStage(props: CanvasStageProps) {
 
       const hit = topObjectAt(point);
       if (hit) {
-        onSelectObject(hit.id);
+        if (event.shiftKey) {
+          const next = selectedIds.includes(hit.id)
+            ? selectedIds.filter(id => id !== hit.id)
+            : [...selectedIds, hit.id];
+          onSelectionChange(next);
+          return;
+        }
+
+        const alreadySelected = selectedIds.includes(hit.id);
+        const dragObjects = alreadySelected ? selectedObjects : [hit];
+        if (!alreadySelected) onSelectionChange([hit.id]);
         onBeginEdit();
         interactionRef.current = {
           mode: 'move',
           start: point,
-          originals: hit.points.map(item => ({ ...item })),
-          startObject: hit,
+          originals: dragObjects.map(object => ({
+            id: object.id,
+            points: object.points.map(item => ({ ...item })),
+          })),
           moved: false,
         };
-      } else {
-        onSelectObject(null);
+        return;
       }
+
+      interactionRef.current = {
+        mode: 'marquee',
+        start: point,
+        current: point,
+        base: event.shiftKey ? selectedIds : [],
+        additive: event.shiftKey,
+      };
+      setMarquee({ start: point, current: point });
       return;
     }
 
@@ -489,13 +574,29 @@ export default function CanvasStage(props: CanvasStageProps) {
 
     const point = toProject(screen);
 
+    if (interaction.mode === 'marquee') {
+      interaction.current = point;
+      setMarquee({ start: interaction.start, current: point });
+      return;
+    }
+
     if (interaction.mode === 'draw') {
       if (tool === 'brush') {
-        const last = interaction.preview.points[interaction.preview.points.length - 1];
-        if (!last || distance(last, point) > 1.6 / Math.max(0.3, view.scale)) {
+        const points = interaction.preview.points;
+        const last = points[points.length - 1];
+        const previous = points[points.length - 2] || last;
+        const nextPoint = smoothDrawing
+          ? {
+              x: previous.x * 0.16 + last.x * 0.3 + point.x * 0.54,
+              y: previous.y * 0.16 + last.y * 0.3 + point.y * 0.54,
+            }
+          : point;
+        const minDistance = (smoothDrawing ? 0.9 : 1.6) / Math.max(0.3, view.scale);
+        interaction.pointer = point;
+        if (!last || distance(last, nextPoint) > minDistance) {
           interaction.preview = {
             ...interaction.preview,
-            points: [...interaction.preview.points, point],
+            points: [...points, nextPoint],
           };
           setPreview(interaction.preview);
         }
@@ -518,9 +619,11 @@ export default function CanvasStage(props: CanvasStageProps) {
       const dx = point.x - interaction.start.x;
       const dy = point.y - interaction.start.y;
       if (Math.abs(dx) > 0.2 || Math.abs(dy) > 0.2) interaction.moved = true;
-      onUpdateObjectPoints(
-        interaction.startObject.id,
-        transformPoints(interaction.originals, dx, dy),
+      onUpdateObjectsPoints(
+        interaction.originals.map(object => ({
+          id: object.id,
+          points: transformPoints(object.points, dx, dy),
+        })),
       );
       return;
     }
@@ -540,9 +643,11 @@ export default function CanvasStage(props: CanvasStageProps) {
       if (Math.abs(scaleX) < 0.04) scaleX = Math.sign(scaleX || 1) * 0.04;
       if (Math.abs(scaleY) < 0.04) scaleY = Math.sign(scaleY || 1) * 0.04;
       interaction.moved = true;
-      onUpdateObjectPoints(
-        selectedObject?.id || '',
-        scalePointsAround(originals, anchor, scaleX, scaleY),
+      onUpdateObjectsPoints(
+        originals.map(object => ({
+          id: object.id,
+          points: scalePointsAround(object.points, anchor, scaleX, scaleY),
+        })),
       );
     }
   };
@@ -551,6 +656,24 @@ export default function CanvasStage(props: CanvasStageProps) {
     const interaction = interactionRef.current;
     interactionRef.current = null;
     if (!interaction) return;
+
+    if (interaction.mode === 'marquee') {
+      const box = normalizeBox(interaction.start, interaction.current);
+      const tiny = box.width * view.scale < 4 && box.height * view.scale < 4;
+      if (tiny) {
+        if (!interaction.additive) onSelectionChange([]);
+      } else {
+        const hits = scene
+          .filter(object => boundsIntersect(objectBounds(object), box))
+          .map(object => object.id);
+        const next = interaction.additive
+          ? Array.from(new Set([...interaction.base, ...hits]))
+          : hits;
+        onSelectionChange(next);
+      }
+      setMarquee(null);
+      return;
+    }
 
     if (interaction.mode === 'draw') {
       let final = interaction.preview;
@@ -574,11 +697,22 @@ export default function CanvasStage(props: CanvasStageProps) {
           };
         }
       }
-      if (tool === 'brush' && final.points.length < 2) {
-        final = {
-          ...final,
-          points: [final.points[0], { x: final.points[0].x + 0.5, y: final.points[0].y + 0.5 }],
-        };
+      if (tool === 'brush') {
+        if (smoothDrawing && distance(final.points[final.points.length - 1], interaction.pointer) > 0.3) {
+          final = { ...final, points: [...final.points, interaction.pointer] };
+        }
+        if (final.points.length < 2) {
+          final = {
+            ...final,
+            points: [final.points[0], { x: final.points[0].x + 0.5, y: final.points[0].y + 0.5 }],
+          };
+        }
+        if (smoothDrawing && final.points.length > 2) {
+          final = {
+            ...final,
+            points: smoothPolyline(final.points, final.points.length > 140 ? 1 : 2),
+          };
+        }
       }
       setPreview(null);
       onCreateObject(final);
@@ -594,6 +728,7 @@ export default function CanvasStage(props: CanvasStageProps) {
     const interaction = interactionRef.current;
     interactionRef.current = null;
     setPreview(null);
+    setMarquee(null);
     if (interaction?.mode === 'move' || interaction?.mode === 'resize') onEndEdit();
   };
 
@@ -677,6 +812,18 @@ export default function CanvasStage(props: CanvasStageProps) {
           />
           <strong>{strokeWidth}</strong>
         </label>
+        {tool === 'brush' && (
+          <button
+            type="button"
+            className={`smooth-toggle ${smoothDrawing ? 'is-on' : ''}`}
+            aria-pressed={smoothDrawing}
+            onClick={() => onSmoothDrawingChange(!smoothDrawing)}
+            title="Auto smooth brush strokes"
+          >
+            <Icon name="sparkle" size={12} />
+            <span>Smooth</span>
+          </button>
+        )}
       </div>
 
       {!editable && (

@@ -28,10 +28,18 @@ the document, editing either end updates the whole transition immediately.
 
 ![Quack Editor welcome screen](docs/quack-welcome.png)
 
+Multi-select with a marquee, or Shift-click parts to add them to the group:
+
+![Quack Editor multi-selection](docs/quack-multiselect.png)
+
 ## Features
 
 - **Custom canvas engine** with brush, line, rectangle, ellipse, star, text, eraser,
   select/move, corner resizing, pan, and wheel zoom.
+- **Multi-selection**: drag a marquee on empty canvas or Shift-click parts to add/remove
+  them. Move and resize the whole group, or batch-style it from the studio panel.
+- **Auto-smoothing brush**: a persistent Smooth toggle softens hand jitter while you
+  draw and finishes each stroke with a Chaikin smoothing pass.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity
@@ -88,6 +96,9 @@ from `master`.
 | Key | Action |
 | --- | --- |
 | `V` / `B` / `L` / `R` / `O` / `S` / `T` / `E` / `H` | Select, Brush, Line, Rectangle, Ellipse, Star, Text, Eraser, Pan |
+| Drag empty canvas | Marquee-select parts |
+| `Shift` + click | Add or remove a part from the selection |
+| `Ctrl/Cmd + A` | Select every part on the current keyframe |
 | `Space` | Play / pause |
 | `←` / `→` | Step frames when nothing is selected; nudge selection when it is |
 | `Shift` + arrows | Nudge by 10 px |
