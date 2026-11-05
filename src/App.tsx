@@ -20,6 +20,7 @@ import {
   unionBounds,
 } from './model/geometry';
 import { renderProjectFrame } from './model/render';
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import { downloadBlob, exportFramePng, readFileAsText, saveProjectFile, slugify } from './utils/files';
 import TopBar from './components/TopBar';
 import Toolbar from './components/Toolbar';
@@ -455,6 +456,151 @@ export default function App() {
     notify('Project file saved.', 'mint');
   };
 
+  const exportMp4 = async () => {
+    setExportError(null);
+    setExportProgress(0);
+
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) {
+      setExportError('High-quality MP4 needs WebCodecs H.264. Try Chrome or Edge on desktop.');
+      return;
+    }
+
+    const maxDimension = Math.max(project.width, project.height);
+    const preferredScale = Math.max(1, Math.min(2, 3840 / Math.max(1, maxDimension)));
+    const scales = Array.from(new Set([preferredScale, 1]));
+    const codecs = ['avc1.640028', 'avc1.4D4028', 'avc1.42001F'];
+    let choice: {
+      config: VideoEncoderConfig;
+      width: number;
+      height: number;
+      scaleX: number;
+      scaleY: number;
+    } | null = null;
+
+    for (const scale of scales) {
+      const width = Math.max(2, Math.round((project.width * scale) / 2) * 2);
+      const height = Math.max(2, Math.round((project.height * scale) / 2) * 2);
+      for (const codec of codecs) {
+        const bitrate = scale >= 1.9 ? 18_000_000 : 9_000_000;
+        const config: VideoEncoderConfig = {
+          codec,
+          width,
+          height,
+          bitrate,
+          framerate: project.fps,
+          latencyMode: 'quality',
+          bitrateMode: 'variable',
+          avc: { format: 'avc' },
+        };
+        try {
+          const support = await VideoEncoder.isConfigSupported(config);
+          if (support.supported) {
+            choice = {
+              config: support.config || config,
+              width,
+              height,
+              scaleX: width / project.width,
+              scaleY: height / project.height,
+            };
+            break;
+          }
+        } catch {
+          // Try the next H.264 profile.
+        }
+      }
+      if (choice) break;
+    }
+
+    if (!choice) {
+      setExportError('This browser cannot encode H.264 MP4 at this project size. Try a smaller canvas or use WebM.');
+      return;
+    }
+
+    setExporting(true);
+    const canvas = document.createElement('canvas');
+    canvas.width = choice.width;
+    canvas.height = choice.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setExporting(false);
+      setExportError('Could not create the MP4 render canvas.');
+      return;
+    }
+
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({
+      target,
+      video: {
+        codec: 'avc',
+        width: choice.width,
+        height: choice.height,
+        frameRate: project.fps,
+      },
+      fastStart: 'in-memory',
+    });
+
+    let encoderError: Error | null = null;
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: error => {
+        encoderError = error;
+      },
+    });
+
+    try {
+      encoder.configure(choice.config);
+      ctx.setTransform(choice.scaleX, 0, 0, choice.scaleY, 0, 0);
+
+      const frameCount = duration;
+      const frameDuration = 1_000_000 / project.fps;
+      const keyframeInterval = Math.max(1, Math.round(project.fps * 2));
+
+      for (let frame = 1; frame <= frameCount; frame++) {
+        renderProjectFrame(ctx, project, frame);
+        const videoFrame = new VideoFrame(canvas, {
+          timestamp: Math.round((frame - 1) * frameDuration),
+          duration: Math.round(frameDuration),
+        });
+        encoder.encode(videoFrame, {
+          keyFrame: (frame - 1) % keyframeInterval === 0,
+        });
+        videoFrame.close();
+        while (encoder.encodeQueueSize > 8) {
+          await new Promise(resolve => window.setTimeout(resolve, 4));
+        }
+        setExportProgress(5 + (frame / frameCount) * 90);
+      }
+
+      setExportProgress(96);
+      await encoder.flush();
+      if (encoderError) throw encoderError;
+
+      muxer.finalize();
+      const buffer = target.buffer;
+      downloadBlob(
+        new Blob([buffer], { type: 'video/mp4' }),
+        `${slugify(project.name)}.mp4`,
+      );
+      setExportProgress(100);
+      setExporting(false);
+      setExportOpen(false);
+      notify(
+        `High-quality MP4 exported at ${choice.width}×${choice.height}.`,
+        'mint',
+      );
+    } catch (error) {
+      console.error(error);
+      setExportError('The MP4 encoder stopped unexpectedly. Try a shorter timeline or WebM.');
+      setExporting(false);
+    } finally {
+      try {
+        encoder.close();
+      } catch {
+        // Encoder may already be closed.
+      }
+    }
+  };
+
   const exportWebm = async () => {
     if (!('MediaRecorder' in window)) {
       setExportError('This browser cannot record WebM. Try the project file or a PNG frame.');
@@ -737,6 +883,7 @@ export default function App() {
             setExportError(null);
           }
         }}
+        onExportMp4={exportMp4}
         onExportPng={() => {
           exportFramePng(project, currentFrame);
           notify('Still frame exported as PNG.', 'mint');

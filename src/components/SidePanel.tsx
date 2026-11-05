@@ -465,7 +465,7 @@ export default function SidePanel(props: SidePanelProps) {
       <footer className="panel-footer">
         <span className="footer-duck">Q</span>
         <span>
-          Quack Editor <strong>1.3</strong><br />
+          Quack Editor <strong>1.4</strong><br />
           <small>From scratch · Unlicense</small>
         </span>
         <a

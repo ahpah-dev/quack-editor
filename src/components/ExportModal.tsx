@@ -8,12 +8,20 @@ interface ExportModalProps {
   progress: number;
   error: string | null;
   onClose: () => void;
+  onExportMp4: () => void;
   onExportPng: () => void;
   onExportWebm: () => void;
   onExportProject: () => void;
 }
 
 const options = [
+  {
+    id: 'mp4',
+    icon: 'video' as const,
+    title: 'High-quality MP4',
+    text: 'H.264 at up to 2× project resolution with a high-quality bitrate.',
+    tag: 'MP4 · H.264 · HIGH BITRATE',
+  },
   {
     id: 'png',
     icon: 'image' as const,
@@ -24,9 +32,9 @@ const options = [
   {
     id: 'webm',
     icon: 'video' as const,
-    title: 'Motion clip',
-    text: 'Record the whole timeline as a WebM video.',
-    tag: 'WEBM · realtime',
+    title: 'WebM fallback',
+    text: 'A quick realtime recording for broad browser support.',
+    tag: 'WEBM · REAL TIME',
   },
   {
     id: 'project',
@@ -48,7 +56,7 @@ export default function ExportModal(props: ExportModalProps) {
           <div>
             <span className="eyebrow">Release it into the pond</span>
             <h2>Export <em>{projectName}</em></h2>
-            <p>Three ways out. All of them cute.</p>
+            <p>Four ways out. MP4 is the pretty one.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close export dialog">
             <Icon name="close" size={18} />
@@ -60,8 +68,9 @@ export default function ExportModal(props: ExportModalProps) {
             <button
               key={option.id}
               type="button"
-              className={`export-option ${option.id === 'webm' ? 'is-featured' : ''}`}
+              className={`export-option ${option.id === 'mp4' ? 'is-featured' : ''}`}
               onClick={() => {
+                if (option.id === 'mp4') props.onExportMp4();
                 if (option.id === 'png') props.onExportPng();
                 if (option.id === 'webm') props.onExportWebm();
                 if (option.id === 'project') props.onExportProject();
@@ -86,14 +95,14 @@ export default function ExportModal(props: ExportModalProps) {
               <strong>{Math.round(progress)}%</strong>
             </div>
             <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-            <small>Keep this tab visible while the clip records.</small>
+            <small>Large exports may take a moment. The editor stays responsive.</small>
           </div>
         )}
 
         {error && <div className="export-error">{error}</div>}
 
         <div className="modal-foot">
-          <span>Canvas exports follow your project size. The edit file stays editable.</span>
+          <span>MP4 is rendered offline frame by frame, so timing stays exact.</span>
           <button type="button" className="soft-btn" onClick={onClose}>Cancel</button>
         </div>
       </div>

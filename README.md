@@ -40,6 +40,10 @@ Rotate a part or a whole selection with the handle or precision buttons:
 
 ![Quack Editor rotation](docs/quack-rotate.png)
 
+MP4 export is rendered offline at 2× resolution with H.264:
+
+![Quack Editor export options](docs/quack-export.png)
+
 ## Features
 
 - **Custom canvas engine** with brush, line, rectangle, ellipse, star, text, eraser,
@@ -66,8 +70,11 @@ Rotate a part or a whole selection with the handle or precision buttons:
 - **Undo and redo** across drawing, moving, resizing, styling, frames, and demo loads.
 - **Autosave** to local storage and a debounced “Saved just now” indicator.
 - **Readable project files** in JSON with the `.quack` extension.
+- **High-quality MP4 export**: true H.264 encoding through WebCodecs, rendered offline
+  frame by frame at up to 2× project resolution (capped at 3840 px) with up to an
+  18 Mbps variable bitrate and frame-accurate timing.
 - **PNG still export** at 2× project resolution.
-- **WebM motion export** using the browser’s native MediaRecorder.
+- **WebM fallback** using the browser’s native MediaRecorder.
 - **Responsive studio**: the controls become a slide-over drawer on narrow screens.
 - **Keyboard-first**: tool letters, Space to play, arrows to step/nudge, and standard
   undo/redo/save/duplicate shortcuts.
@@ -168,8 +175,9 @@ original implementations in this repository.
 **Everything in this repository is released into the public domain under the
 [Unlicense](LICENSE).** You can copy it, remix it, sell it, or ship it without asking.
 
-Third-party runtime dependencies (React, Vite, and the Manrope/Fraunces fonts) keep
-their own licenses; the fonts are distributed under the SIL Open Font License.
+Third-party runtime dependencies (React, Vite, `mp4-muxer`, and the
+Manrope/Fraunces fonts) keep their own licenses; the fonts are distributed under
+the SIL Open Font License.
 
 ## Name
 
