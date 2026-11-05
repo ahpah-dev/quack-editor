@@ -17,6 +17,11 @@ function isText(object: ShapeObject) {
   return object.kind === 'text';
 }
 
+function lerpRotation(source: number, destination: number, t: number): number {
+  const delta = ((destination - source + 540) % 360) - 180;
+  return source + delta * t;
+}
+
 function centerOf(object: ShapeObject) {
   const bounds = boundsOfPoints(object.points);
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
@@ -93,6 +98,7 @@ function interpolateText(source: ShapeObject, destination: ShapeObject, t: numbe
       stroke: mixColor(source.stroke, destination.stroke, t),
       strokeWidth: lerp(source.strokeWidth, destination.strokeWidth, t),
       opacity: lerp(source.opacity, destination.opacity, t),
+      rotation: lerpRotation(source.rotation || 0, destination.rotation || 0, t),
       fontSize: lerp(source.fontSize || 64, destination.fontSize || 64, t),
     },
   ];
@@ -131,6 +137,7 @@ function morphObject(
       stroke: mixColor(source.stroke, destination.stroke, t),
       strokeWidth: lerp(source.strokeWidth, destination.strokeWidth, t),
       opacity: lerp(source.opacity, destination.opacity, t),
+      rotation: lerpRotation(source.rotation || 0, destination.rotation || 0, t),
       text: undefined,
     },
   ];

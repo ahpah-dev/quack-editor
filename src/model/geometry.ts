@@ -32,7 +32,7 @@ export function boundsOfPoints(points: Point[]): Bounds {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-export function objectBounds(object: ShapeObject): Bounds {
+export function baseObjectBounds(object: ShapeObject): Bounds {
   if (object.kind === 'text') {
     const anchor = object.points[0] || { x: 0, y: 0 };
     const size = object.fontSize || 64;
@@ -45,6 +45,43 @@ export function objectBounds(object: ShapeObject): Bounds {
     };
   }
   return boundsOfPoints(object.points);
+}
+
+export function normalizeDegrees(degrees: number): number {
+  if (!Number.isFinite(degrees)) return 0;
+  return ((degrees + 180) % 360 + 360) % 360 - 180;
+}
+
+export function rotatePoint(point: Point, center: Point, degrees: number): Point {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
+export function rotatePointsAround(points: Point[], center: Point, degrees: number): Point[] {
+  return points.map(point => rotatePoint(point, center, degrees));
+}
+
+export function objectBounds(object: ShapeObject): Bounds {
+  const base = baseObjectBounds(object);
+  const rotation = object.rotation || 0;
+  if (!rotation) return base;
+
+  const center = { x: base.x + base.width / 2, y: base.y + base.height / 2 };
+  const corners = [
+    { x: base.x, y: base.y },
+    { x: base.x + base.width, y: base.y },
+    { x: base.x + base.width, y: base.y + base.height },
+    { x: base.x, y: base.y + base.height },
+  ].map(point => rotatePoint(point, center, rotation));
+
+  return boundsOfPoints(corners);
 }
 
 export function centerOfPoints(points: Point[]): Point {
@@ -166,23 +203,25 @@ export function distanceToSegment(point: Point, a: Point, b: Point): number {
 }
 
 export function hitTestObject(object: ShapeObject, point: Point, tolerance = 8): boolean {
-  const bounds = objectBounds(object);
+  const base = baseObjectBounds(object);
+  const center = { x: base.x + base.width / 2, y: base.y + base.height / 2 };
+  const localPoint = object.rotation ? rotatePoint(point, center, -(object.rotation || 0)) : point;
   if (
-    point.x < bounds.x - tolerance ||
-    point.y < bounds.y - tolerance ||
-    point.x > bounds.x + bounds.width + tolerance ||
-    point.y > bounds.y + bounds.height + tolerance
+    localPoint.x < base.x - tolerance ||
+    localPoint.y < base.y - tolerance ||
+    localPoint.x > base.x + base.width + tolerance ||
+    localPoint.y > base.y + base.height + tolerance
   ) {
     return false;
   }
 
   if (object.kind === 'text') return true;
-  if (object.closed && object.fill && pointInPolygon(point, object.points)) return true;
+  if (object.closed && object.fill && pointInPolygon(localPoint, object.points)) return true;
 
   const threshold = Math.max(tolerance, object.strokeWidth / 2 + 2);
   const points = object.closed ? [...object.points, object.points[0]] : object.points;
   for (let index = 0; index < points.length - 1; index++) {
-    if (distanceToSegment(point, points[index], points[index + 1]) <= threshold) return true;
+    if (distanceToSegment(localPoint, points[index], points[index + 1]) <= threshold) return true;
   }
   return false;
 }

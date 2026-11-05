@@ -12,7 +12,13 @@ import {
   updateKeyframe,
 } from './model/project';
 import { sceneAt, sceneHasContent } from './model/animation';
-import { uid } from './model/geometry';
+import {
+  normalizeDegrees,
+  objectBounds,
+  rotatePointsAround,
+  uid,
+  unionBounds,
+} from './model/geometry';
 import { renderProjectFrame } from './model/render';
 import { downloadBlob, exportFramePng, readFileAsText, saveProjectFile, slugify } from './utils/files';
 import TopBar from './components/TopBar';
@@ -285,16 +291,47 @@ export default function App() {
     }
   };
 
-  const updateObjectsPoints = (
-    updates: Array<{ id: string; points: ShapeObject['points'] }>,
+  const updateObjects = (
+    updates: Array<{ id: string; points?: ShapeObject['points']; rotation?: number }>,
   ) => {
     if (!activeKeyframe || !updates.length) return;
-    const byId = new Map(updates.map(update => [update.id, update.points]));
+    const byId = new Map(updates.map(update => [update.id, update]));
     updateLive(draft =>
       updateKeyframe(draft, activeKeyframe.id, keyframe => ({
         ...keyframe,
+        objects: keyframe.objects.map(object => {
+          const update = byId.get(object.id);
+          if (!update) return object;
+          return {
+            ...object,
+            ...(update.points ? { points: update.points } : {}),
+            ...(update.rotation !== undefined ? { rotation: update.rotation } : {}),
+          };
+        }),
+      })),
+    );
+  };
+
+  const rotateSelection = (degrees: number) => {
+    if (!activeKeyframe || !selectedObjects.length) return;
+    if (selectedObjects.length === 1) {
+      const object = selectedObjects[0];
+      updateSelected({
+        rotation: normalizeDegrees((object.rotation || 0) + degrees),
+      });
+      return;
+    }
+
+    const bounds = unionBounds(selectedObjects.map(object => objectBounds(object)));
+    const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    const selected = new Set(selectedIds);
+    commit(draft =>
+      updateKeyframe(draft, activeKeyframe.id, keyframe => ({
+        ...keyframe,
         objects: keyframe.objects.map(object =>
-          byId.has(object.id) ? { ...object, points: byId.get(object.id)! } : object,
+          selected.has(object.id)
+            ? { ...object, points: rotatePointsAround(object.points, center, degrees) }
+            : object,
         ),
       })),
     );
@@ -635,7 +672,7 @@ export default function App() {
             onSmoothDrawingChange={setSmoothDrawing}
             onSelectionChange={setSelectedIds}
             onCreateObject={createObject}
-            onUpdateObjectsPoints={updateObjectsPoints}
+            onUpdateObjects={updateObjects}
             onBeginEdit={beginTransaction}
             onEndEdit={endTransaction}
             onDeleteObject={deleteObject}
@@ -676,6 +713,7 @@ export default function App() {
           onOnionRangeChange={setOnionRange}
           onUpdateProject={updateProject}
           onUpdateSelected={updateSelected}
+          onRotateSelection={rotateSelection}
           onAddFrame={addFrame}
           onPinKeyframe={pinKeyframe}
           onDeleteKeyframe={deleteKeyframe}

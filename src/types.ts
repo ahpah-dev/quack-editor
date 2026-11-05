@@ -23,6 +23,7 @@ export interface ShapeObject {
   stroke: string | null;
   strokeWidth: number;
   opacity: number;
+  rotation?: number;
   text?: string;
   fontSize?: number;
 }

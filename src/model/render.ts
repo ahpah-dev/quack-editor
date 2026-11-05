@@ -1,14 +1,26 @@
 import type { Project, ShapeObject } from '../types';
-import { polygonPath } from './geometry';
+import { baseObjectBounds, polygonPath } from './geometry';
 import { sceneAt } from './animation';
 import { projectDuration } from './project';
 
 export const TEXT_FONT = '"Manrope Variable", "Manrope", system-ui, sans-serif';
 
+function applyObjectRotation(ctx: CanvasRenderingContext2D, object: ShapeObject): void {
+  const rotation = object.rotation || 0;
+  if (!rotation) return;
+  const bounds = baseObjectBounds(object);
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  ctx.translate(centerX, centerY);
+  ctx.rotate((rotation * Math.PI) / 180);
+  ctx.translate(-centerX, -centerY);
+}
+
 export function drawShape(ctx: CanvasRenderingContext2D, object: ShapeObject): void {
   if (object.opacity <= 0.002) return;
   ctx.save();
   ctx.globalAlpha = object.opacity;
+  applyObjectRotation(ctx, object);
 
   if (object.kind === 'text') {
     const anchor = object.points[0] || { x: 0, y: 0 };
@@ -61,6 +73,7 @@ function drawTintedShape(
   if (object.opacity <= 0.01) return;
   const alpha = Math.max(0, Math.min(1, strength * object.opacity));
   ctx.save();
+  applyObjectRotation(ctx, object);
 
   if (object.kind === 'text') {
     const anchor = object.points[0] || { x: 0, y: 0 };

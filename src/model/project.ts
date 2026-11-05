@@ -182,6 +182,7 @@ function sanitizeObject(value: unknown): ShapeObject | null {
     stroke: typeof object.stroke === 'string' ? object.stroke : null,
     strokeWidth: Math.max(0, asNumber(object.strokeWidth, 4)),
     opacity: Math.max(0, Math.min(1, asNumber(object.opacity, 1))),
+    rotation: asNumber(object.rotation, 0),
     text: typeof object.text === 'string' ? object.text : undefined,
     fontSize: Math.max(8, asNumber(object.fontSize || 64, 64)),
   };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bounds, Point, Project, ShapeObject, Tool } from '../types';
 import {
+  baseObjectBounds,
   boundsIntersect,
   boundsOfPoints,
   clamp,
@@ -9,7 +10,9 @@ import {
   createStar,
   distance,
   hitTestObject,
+  normalizeDegrees,
   objectBounds,
+  rotatePointsAround,
   scalePointsAround,
   smoothPolyline,
   transformPoints,
@@ -41,7 +44,9 @@ interface CanvasStageProps {
   onSmoothDrawingChange: (smooth: boolean) => void;
   onSelectionChange: (ids: string[]) => void;
   onCreateObject: (object: ShapeObject) => void;
-  onUpdateObjectsPoints: (updates: Array<{ id: string; points: Point[] }>) => void;
+  onUpdateObjects: (
+    updates: Array<{ id: string; points?: Point[]; rotation?: number }>,
+  ) => void;
   onBeginEdit: () => void;
   onEndEdit: () => void;
   onDeleteObject: (id: string) => void;
@@ -73,6 +78,15 @@ type Interaction =
       handle: Handle;
       originals: Array<{ id: string; points: Point[] }>;
       bounds: Bounds;
+      moved: boolean;
+    }
+  | {
+      mode: 'rotate';
+      center: Point;
+      startAngle: number;
+      baseRotation: number;
+      originals: Array<{ id: string; points: Point[] }>;
+      group: boolean;
       moved: boolean;
     }
   | {
@@ -201,7 +215,7 @@ export default function CanvasStage(props: CanvasStageProps) {
     onSmoothDrawingChange,
     onSelectionChange,
     onCreateObject,
-    onUpdateObjectsPoints,
+    onUpdateObjects,
     onBeginEdit,
     onEndEdit,
     onDeleteObject,
@@ -311,6 +325,21 @@ export default function CanvasStage(props: CanvasStageProps) {
     [canResize, editable, handlePoints],
   );
 
+  const rotateHandle = useMemo(() => {
+    if (!selectionScreen) return null;
+    return {
+      x: selectionScreen.x + selectionScreen.width / 2,
+      y: selectionScreen.y - 31,
+    };
+  }, [selectionScreen]);
+
+  const hitRotateHandle = useCallback(
+    (screen: Point): boolean => {
+      return !!editable && !!rotateHandle && distance(screen, rotateHandle) <= 13;
+    },
+    [editable, rotateHandle],
+  );
+
   const topObjectAt = useCallback(
     (point: Point): ShapeObject | null => {
       for (let index = scene.length - 1; index >= 0; index--) {
@@ -416,6 +445,42 @@ export default function CanvasStage(props: CanvasStageProps) {
       }
     }
 
+    if (selectedObjects.length && editable && selectionScreen && rotateHandle) {
+      const topCenter = {
+        x: selectionScreen.x + selectionScreen.width / 2,
+        y: selectionScreen.y - 7,
+      };
+      ctx.save();
+      ctx.strokeStyle = 'rgba(87, 245, 210, 0.7)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(topCenter.x, topCenter.y);
+      ctx.lineTo(rotateHandle.x, rotateHandle.y + 7);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0b332a';
+      ctx.strokeStyle = '#57f5d2';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(rotateHandle.x, rotateHandle.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#8affdf';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(rotateHandle.x, rotateHandle.y, 4, -Math.PI * 0.2, Math.PI * 1.25);
+      ctx.stroke();
+      ctx.fillStyle = '#8affdf';
+      ctx.beginPath();
+      ctx.moveTo(rotateHandle.x + 4, rotateHandle.y - 3);
+      ctx.lineTo(rotateHandle.x + 7, rotateHandle.y + 1);
+      ctx.lineTo(rotateHandle.x + 2, rotateHandle.y + 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
     if (marquee) {
       const x = Math.min(marquee.start.x, marquee.current.x);
       const y = Math.min(marquee.start.y, marquee.current.y);
@@ -451,6 +516,7 @@ export default function CanvasStage(props: CanvasStageProps) {
     project.background,
     project.height,
     project.width,
+    rotateHandle,
     scene,
     selectedObjects,
     selectionScreen,
@@ -476,6 +542,31 @@ export default function CanvasStage(props: CanvasStageProps) {
     if (!editable) return;
 
     if (tool === 'select') {
+      if (hitRotateHandle(screen) && selectionBounds && selectedObjects.length) {
+        const single = selectedObjects.length === 1;
+        const baseBounds = single
+          ? baseObjectBounds(selectedObjects[0])
+          : selectionBounds;
+        const center = {
+          x: baseBounds.x + baseBounds.width / 2,
+          y: baseBounds.y + baseBounds.height / 2,
+        };
+        onBeginEdit();
+        interactionRef.current = {
+          mode: 'rotate',
+          center,
+          startAngle: Math.atan2(point.y - center.y, point.x - center.x),
+          baseRotation: single ? selectedObjects[0].rotation || 0 : 0,
+          originals: selectedObjects.map(object => ({
+            id: object.id,
+            points: object.points.map(item => ({ ...item })),
+          })),
+          group: !single,
+          moved: false,
+        };
+        return;
+      }
+
       const handle = hitHandle(screen);
       if (handle && selectionBounds && selectedObjects.length) {
         onBeginEdit();
@@ -626,7 +717,7 @@ export default function CanvasStage(props: CanvasStageProps) {
       const dx = point.x - interaction.start.x;
       const dy = point.y - interaction.start.y;
       if (Math.abs(dx) > 0.2 || Math.abs(dy) > 0.2) interaction.moved = true;
-      onUpdateObjectsPoints(
+      onUpdateObjects(
         interaction.originals.map(object => ({
           id: object.id,
           points: transformPoints(object.points, dx, dy),
@@ -650,12 +741,37 @@ export default function CanvasStage(props: CanvasStageProps) {
       if (Math.abs(scaleX) < 0.04) scaleX = Math.sign(scaleX || 1) * 0.04;
       if (Math.abs(scaleY) < 0.04) scaleY = Math.sign(scaleY || 1) * 0.04;
       interaction.moved = true;
-      onUpdateObjectsPoints(
+      onUpdateObjects(
         originals.map(object => ({
           id: object.id,
           points: scalePointsAround(object.points, anchor, scaleX, scaleY),
         })),
       );
+      return;
+    }
+
+    if (interaction.mode === 'rotate') {
+      const angle = Math.atan2(point.y - interaction.center.y, point.x - interaction.center.x);
+      let delta = ((angle - interaction.startAngle) * 180) / Math.PI;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      if (Math.abs(delta) > 0.05) interaction.moved = true;
+
+      if (interaction.group) {
+        onUpdateObjects(
+          interaction.originals.map(object => ({
+            id: object.id,
+            points: rotatePointsAround(object.points, interaction.center, delta),
+          })),
+        );
+      } else {
+        onUpdateObjects([
+          {
+            id: interaction.originals[0].id,
+            rotation: normalizeDegrees(interaction.baseRotation + delta),
+          },
+        ]);
+      }
     }
   };
 
@@ -725,7 +841,11 @@ export default function CanvasStage(props: CanvasStageProps) {
       onCreateObject(final);
     }
 
-    if (interaction.mode === 'move' || interaction.mode === 'resize') {
+    if (
+      interaction.mode === 'move' ||
+      interaction.mode === 'resize' ||
+      interaction.mode === 'rotate'
+    ) {
       onEndEdit();
     }
   };
@@ -736,7 +856,13 @@ export default function CanvasStage(props: CanvasStageProps) {
     interactionRef.current = null;
     setPreview(null);
     setMarquee(null);
-    if (interaction?.mode === 'move' || interaction?.mode === 'resize') onEndEdit();
+    if (
+      interaction?.mode === 'move' ||
+      interaction?.mode === 'resize' ||
+      interaction?.mode === 'rotate'
+    ) {
+      onEndEdit();
+    }
   };
 
   const setZoomAt = (nextZoom: number, anchor: Point = { x: size.width / 2, y: size.height / 2 }) => {

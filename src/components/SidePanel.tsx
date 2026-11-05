@@ -1,6 +1,6 @@
 import type { Project, ShapeObject } from '../types';
 import { toHex } from '../model/colors';
-import { objectBounds, unionBounds } from '../model/geometry';
+import { normalizeDegrees, objectBounds, unionBounds } from '../model/geometry';
 import { Icon } from './Icons';
 
 interface SidePanelProps {
@@ -19,6 +19,7 @@ interface SidePanelProps {
   onOnionRangeChange: (range: number) => void;
   onUpdateProject: (patch: Partial<Project>) => void;
   onUpdateSelected: (patch: Partial<ShapeObject>) => void;
+  onRotateSelection: (degrees: number) => void;
   onAddFrame: () => void;
   onPinKeyframe: () => void;
   onDeleteKeyframe: () => void;
@@ -117,6 +118,7 @@ export default function SidePanel(props: SidePanelProps) {
     onOnionRangeChange,
     onUpdateProject,
     onUpdateSelected,
+    onRotateSelection,
     onAddFrame,
     onPinKeyframe,
     onDeleteKeyframe,
@@ -312,6 +314,22 @@ export default function SidePanel(props: SidePanelProps) {
             <strong>{Math.round(selectedObject.opacity * 100)}%</strong>
           </label>
 
+          <div className="rotate-block">
+            <div className="rotate-label">
+              <span>Rotate</span>
+              <strong>
+                {multi ? 'Group' : `${Math.round(normalizeDegrees(selectedObject.rotation || 0))}°`}
+              </strong>
+            </div>
+            <div className="rotate-buttons">
+              <button type="button" onClick={() => onRotateSelection(-90)} title="Rotate 90° left">−90°</button>
+              <button type="button" onClick={() => onRotateSelection(-15)} title="Rotate 15° left">−15°</button>
+              <button type="button" onClick={() => onRotateSelection(15)} title="Rotate 15° right">+15°</button>
+              <button type="button" onClick={() => onRotateSelection(90)} title="Rotate 90° right">+90°</button>
+            </div>
+            <small>Or drag the round handle above the selection.</small>
+          </div>
+
           <div className="geometry-row">
             <span>X <strong>{Math.round(bounds?.x || 0)}</strong></span>
             <span>Y <strong>{Math.round(bounds?.y || 0)}</strong></span>
@@ -447,7 +465,7 @@ export default function SidePanel(props: SidePanelProps) {
       <footer className="panel-footer">
         <span className="footer-duck">Q</span>
         <span>
-          Quack Editor <strong>1.2</strong><br />
+          Quack Editor <strong>1.3</strong><br />
           <small>From scratch · Unlicense</small>
         </span>
         <a

@@ -36,6 +36,10 @@ Onion skinning shows the previous frames in amber and the next frames in mint:
 
 ![Quack Editor onion skinning](docs/quack-onion.png)
 
+Rotate a part or a whole selection with the handle or precision buttons:
+
+![Quack Editor rotation](docs/quack-rotate.png)
+
 ## Features
 
 - **Custom canvas engine** with brush, line, rectangle, ellipse, star, text, eraser,
@@ -47,6 +51,9 @@ Onion skinning shows the previous frames in amber and the next frames in mint:
 - **Onion skinning**: ghost the frames around the playhead. Previous frames tint amber,
   upcoming frames tint mint, and the range is adjustable from ±1 to ±3. Ghosts hide
   while playing, and the setting is remembered between sessions.
+- **Free rotation**: drag the round handle above the selection or use the ±15°/±90°
+  controls in the studio panel. Rotation works on a single part or a whole
+  multi-selection, persists in the project file, and interpolates through morphs.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity
