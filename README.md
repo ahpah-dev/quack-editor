@@ -32,6 +32,10 @@ Multi-select with a marquee, or Shift-click parts to add them to the group:
 
 ![Quack Editor multi-selection](docs/quack-multiselect.png)
 
+Onion skinning shows the previous frames in amber and the next frames in mint:
+
+![Quack Editor onion skinning](docs/quack-onion.png)
+
 ## Features
 
 - **Custom canvas engine** with brush, line, rectangle, ellipse, star, text, eraser,
@@ -40,6 +44,9 @@ Multi-select with a marquee, or Shift-click parts to add them to the group:
   them. Move and resize the whole group, or batch-style it from the studio panel.
 - **Auto-smoothing brush**: a persistent Smooth toggle softens hand jitter while you
   draw and finishes each stroke with a Chaikin smoothing pass.
+- **Onion skinning**: ghost the frames around the playhead. Previous frames tint amber,
+  upcoming frames tint mint, and the range is adjustable from ±1 to ±3. Ghosts hide
+  while playing, and the setting is remembered between sessions.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity

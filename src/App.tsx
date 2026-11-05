@@ -86,6 +86,13 @@ export default function App() {
   const [smoothDrawing, setSmoothDrawing] = useState(
     () => localStorage.getItem('quack.smoothDrawing.v1') !== 'false',
   );
+  const [onionSkin, setOnionSkin] = useState(
+    () => localStorage.getItem('quack.onionSkin.v1') === 'true',
+  );
+  const [onionRange, setOnionRange] = useState(() => {
+    const stored = Number(localStorage.getItem('quack.onionRange.v1'));
+    return Number.isFinite(stored) && stored >= 1 && stored <= 3 ? stored : 2;
+  });
   const [playing, setPlaying] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(() => localStorage.getItem(WELCOME_KEY) !== 'yes');
   const [exportOpen, setExportOpen] = useState(false);
@@ -157,6 +164,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('quack.smoothDrawing.v1', String(smoothDrawing));
   }, [smoothDrawing]);
+
+  useEffect(() => {
+    localStorage.setItem('quack.onionSkin.v1', String(onionSkin));
+    localStorage.setItem('quack.onionRange.v1', String(onionRange));
+  }, [onionRange, onionSkin]);
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -609,6 +621,8 @@ export default function App() {
             tool={tool}
             setTool={setTool}
             editable={!!activeKeyframe}
+            onionSkin={onionSkin && !playing}
+            onionRange={onionRange}
             selectedIds={selectedIds}
             selectedObjects={selectedObjects}
             fillColor={fillColor}
@@ -656,6 +670,10 @@ export default function App() {
           strokeColor={strokeColor}
           onFillColorChange={setFillColor}
           onStrokeColorChange={setStrokeColor}
+          onionSkin={onionSkin}
+          onionRange={onionRange}
+          onToggleOnionSkin={setOnionSkin}
+          onOnionRangeChange={setOnionRange}
           onUpdateProject={updateProject}
           onUpdateSelected={updateSelected}
           onAddFrame={addFrame}

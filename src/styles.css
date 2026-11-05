@@ -813,6 +813,55 @@ kbd {
   text-align: center;
 }
 
+.onion-legend {
+  position: absolute;
+  left: 13px;
+  bottom: 13px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 31px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: rgba(5, 23, 19, 0.82);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  backdrop-filter: blur(14px);
+}
+
+.onion-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.onion-legend small {
+  color: var(--dim);
+  font-size: 7px;
+  font-weight: 650;
+}
+
+.onion-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.onion-dot--prev {
+  background: #ff9f43;
+  box-shadow: 0 0 7px rgba(255, 159, 67, 0.65);
+}
+
+.onion-dot--next {
+  background: var(--mint);
+  box-shadow: 0 0 7px rgba(62, 230, 196, 0.65);
+}
+
 .brush-ring {
   position: absolute;
   z-index: 8;
@@ -1285,6 +1334,16 @@ kbd {
 .gap-control {
   padding-top: 9px;
   border-top: 1px solid rgba(146, 255, 229, 0.075);
+}
+
+.onion-control {
+  padding-top: 3px;
+  border-top: 0;
+  margin-top: -2px;
+}
+
+.onion-control .segmented {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .gap-label {

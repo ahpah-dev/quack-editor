@@ -16,7 +16,7 @@ import {
   uid,
   unionBounds,
 } from '../model/geometry';
-import { drawSceneObjects, drawShape } from '../model/render';
+import { drawOnionSkin, drawSceneObjects, drawShape } from '../model/render';
 import { Icon } from './Icons';
 import type { IconName } from './Icons';
 
@@ -27,6 +27,8 @@ interface CanvasStageProps {
   tool: Tool;
   setTool: (tool: Tool) => void;
   editable: boolean;
+  onionSkin: boolean;
+  onionRange: number;
   selectedIds: string[];
   selectedObjects: ShapeObject[];
   fillColor: string;
@@ -185,6 +187,8 @@ export default function CanvasStage(props: CanvasStageProps) {
     scene,
     tool,
     editable,
+    onionSkin,
+    onionRange,
     selectedIds,
     selectedObjects,
     fillColor,
@@ -357,6 +361,7 @@ export default function CanvasStage(props: CanvasStageProps) {
     ctx.clip();
     ctx.fillStyle = project.background;
     ctx.fillRect(0, 0, project.width, project.height);
+    if (onionSkin) drawOnionSkin(ctx, project, frame, onionRange);
     drawSceneObjects(ctx, scene);
     if (preview) drawShape(ctx, preview);
     ctx.restore();
@@ -440,6 +445,8 @@ export default function CanvasStage(props: CanvasStageProps) {
     frame,
     handlePoints,
     marquee,
+    onionRange,
+    onionSkin,
     preview,
     project.background,
     project.height,
@@ -842,6 +849,14 @@ export default function CanvasStage(props: CanvasStageProps) {
           <span className="canvas-empty-icon"><Icon name="sparkle" size={21} /></span>
           <strong>Make your first mark.</strong>
           <span>Pick a brush or a shape from the left.</span>
+        </div>
+      )}
+
+      {onionSkin && (
+        <div className="onion-legend">
+          <span><i className="onion-dot onion-dot--prev" /> Previous</span>
+          <span><i className="onion-dot onion-dot--next" /> Next</span>
+          <small>±{onionRange} frames</small>
         </div>
       )}
 

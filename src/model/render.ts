@@ -1,6 +1,7 @@
 import type { Project, ShapeObject } from '../types';
 import { polygonPath } from './geometry';
 import { sceneAt } from './animation';
+import { projectDuration } from './project';
 
 export const TEXT_FONT = '"Manrope Variable", "Manrope", system-ui, sans-serif';
 
@@ -49,6 +50,78 @@ export function drawSceneObjects(
   objects: ShapeObject[],
 ): void {
   objects.forEach(object => drawShape(ctx, object));
+}
+
+function drawTintedShape(
+  ctx: CanvasRenderingContext2D,
+  object: ShapeObject,
+  tint: string,
+  strength: number,
+): void {
+  if (object.opacity <= 0.01) return;
+  const alpha = Math.max(0, Math.min(1, strength * object.opacity));
+  ctx.save();
+
+  if (object.kind === 'text') {
+    const anchor = object.points[0] || { x: 0, y: 0 };
+    const size = object.fontSize || 64;
+    ctx.globalAlpha = alpha * 0.72;
+    ctx.fillStyle = tint;
+    ctx.font = `800 ${size}px ${TEXT_FONT}`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(object.text || '', anchor.x, anchor.y);
+    ctx.restore();
+    return;
+  }
+
+  const path = polygonPath(object.points, object.closed, object.smooth);
+
+  if (object.closed) {
+    ctx.globalAlpha = alpha * 0.12;
+    ctx.fillStyle = tint;
+    ctx.fill(path);
+  }
+
+  ctx.globalAlpha = alpha * 0.78;
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = Math.max(1.4, Math.min(3, object.strokeWidth || 2));
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(path);
+  ctx.restore();
+}
+
+export function drawOnionSkin(
+  ctx: CanvasRenderingContext2D,
+  project: Project,
+  frame: number,
+  range: number,
+): void {
+  const duration = projectDuration(project);
+  const layers = Math.max(1, Math.min(4, Math.round(range)));
+
+  for (let offset = layers; offset >= 1; offset--) {
+    const strength = 0.42 / offset;
+    const previousFrame = frame - offset;
+    const nextFrame = frame + offset;
+
+    if (previousFrame >= 1) {
+      drawTintedScene(ctx, sceneAt(project, previousFrame), '#ff9f43', strength);
+    }
+    if (nextFrame <= duration) {
+      drawTintedScene(ctx, sceneAt(project, nextFrame), '#3ee6c4', strength);
+    }
+  }
+}
+
+function drawTintedScene(
+  ctx: CanvasRenderingContext2D,
+  objects: ShapeObject[],
+  tint: string,
+  strength: number,
+): void {
+  objects.forEach(object => drawTintedShape(ctx, object, tint, strength));
 }
 
 export function renderProjectFrame(

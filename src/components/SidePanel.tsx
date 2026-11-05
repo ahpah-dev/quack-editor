@@ -13,6 +13,10 @@ interface SidePanelProps {
   strokeColor: string;
   onFillColorChange: (color: string) => void;
   onStrokeColorChange: (color: string) => void;
+  onionSkin: boolean;
+  onionRange: number;
+  onToggleOnionSkin: (enabled: boolean) => void;
+  onOnionRangeChange: (range: number) => void;
   onUpdateProject: (patch: Partial<Project>) => void;
   onUpdateSelected: (patch: Partial<ShapeObject>) => void;
   onAddFrame: () => void;
@@ -107,6 +111,10 @@ export default function SidePanel(props: SidePanelProps) {
     strokeColor,
     onFillColorChange,
     onStrokeColorChange,
+    onionSkin,
+    onionRange,
+    onToggleOnionSkin,
+    onOnionRangeChange,
     onUpdateProject,
     onUpdateSelected,
     onAddFrame,
@@ -155,6 +163,33 @@ export default function SidePanel(props: SidePanelProps) {
           hint="Blend outlines, not just positions."
           disabled={!project.autoTween}
         />
+        <Toggle
+          checked={onionSkin}
+          onChange={onToggleOnionSkin}
+          label="Onion skin"
+          hint="Ghost the frames around the playhead."
+        />
+
+        {onionSkin && (
+          <div className="gap-control onion-control">
+            <div className="gap-label">
+              <span>Onion range</span>
+              <strong>±{onionRange}</strong>
+            </div>
+            <div className="segmented" role="group" aria-label="Onion skin range">
+              {[1, 2, 3].map(range => (
+                <button
+                  key={range}
+                  type="button"
+                  className={onionRange === range ? 'is-active' : ''}
+                  onClick={() => onOnionRangeChange(range)}
+                >
+                  ±{range}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="gap-control">
           <div className="gap-label">
@@ -412,7 +447,7 @@ export default function SidePanel(props: SidePanelProps) {
       <footer className="panel-footer">
         <span className="footer-duck">Q</span>
         <span>
-          Quack Editor <strong>1.1</strong><br />
+          Quack Editor <strong>1.2</strong><br />
           <small>From scratch · Unlicense</small>
         </span>
         <a
