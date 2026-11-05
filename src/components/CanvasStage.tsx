@@ -12,6 +12,8 @@ import {
   hitTestObject,
   normalizeDegrees,
   objectBounds,
+  objectFramePoints,
+  rotatePoint,
   rotatePointsAround,
   scalePointsAround,
   smoothPolyline,
@@ -78,6 +80,8 @@ type Interaction =
       handle: Handle;
       originals: Array<{ id: string; points: Point[] }>;
       bounds: Bounds;
+      rotation: number;
+      local: boolean;
       moved: boolean;
     }
   | {
@@ -287,32 +291,43 @@ export default function CanvasStage(props: CanvasStageProps) {
     return unionBounds(selectedObjects.map(object => objectBounds(object)));
   }, [selectedObjects]);
 
-  const selectionScreen = useMemo(() => {
+  const selectionFrame = useMemo(() => {
+    if (!selectedObjects.length) return null;
+    const padding = 7 / Math.max(0.05, view.scale);
+    if (selectedObjects.length === 1) {
+      return objectFramePoints(selectedObjects[0], padding);
+    }
     if (!selectionBounds) return null;
-    return {
-      x: view.x + selectionBounds.x * view.scale,
-      y: view.y + selectionBounds.y * view.scale,
-      width: selectionBounds.width * view.scale,
-      height: selectionBounds.height * view.scale,
-    };
-  }, [selectionBounds, view]);
+    return [
+      { x: selectionBounds.x - padding, y: selectionBounds.y - padding },
+      { x: selectionBounds.x + selectionBounds.width + padding, y: selectionBounds.y - padding },
+      {
+        x: selectionBounds.x + selectionBounds.width + padding,
+        y: selectionBounds.y + selectionBounds.height + padding,
+      },
+      { x: selectionBounds.x - padding, y: selectionBounds.y + selectionBounds.height + padding },
+    ];
+  }, [selectedObjects, selectionBounds, view.scale]);
+
+  const selectionFrameScreen = useMemo(() => {
+    if (!selectionFrame) return [];
+    return selectionFrame.map(point => ({
+      x: view.x + point.x * view.scale,
+      y: view.y + point.y * view.scale,
+    }));
+  }, [selectionFrame, view]);
 
   const canResize = selectedObjects.length > 0 && selectedObjects.every(object => object.kind !== 'text');
 
   const handlePoints = useMemo(() => {
-    if (!selectionScreen || !canResize) return [];
-    const pad = 7;
-    const left = selectionScreen.x - pad;
-    const top = selectionScreen.y - pad;
-    const right = selectionScreen.x + selectionScreen.width + pad;
-    const bottom = selectionScreen.y + selectionScreen.height + pad;
+    if (!selectionFrameScreen.length || !canResize) return [];
     return [
-      { handle: 'nw' as Handle, point: { x: left, y: top } },
-      { handle: 'ne' as Handle, point: { x: right, y: top } },
-      { handle: 'sw' as Handle, point: { x: left, y: bottom } },
-      { handle: 'se' as Handle, point: { x: right, y: bottom } },
+      { handle: 'nw' as Handle, point: selectionFrameScreen[0] },
+      { handle: 'ne' as Handle, point: selectionFrameScreen[1] },
+      { handle: 'se' as Handle, point: selectionFrameScreen[2] },
+      { handle: 'sw' as Handle, point: selectionFrameScreen[3] },
     ];
-  }, [canResize, selectionScreen]);
+  }, [canResize, selectionFrameScreen]);
 
   const hitHandle = useCallback(
     (screen: Point): Handle | null => {
@@ -325,13 +340,28 @@ export default function CanvasStage(props: CanvasStageProps) {
     [canResize, editable, handlePoints],
   );
 
-  const rotateHandle = useMemo(() => {
-    if (!selectionScreen) return null;
+  const rotateFrameTop = useMemo(() => {
+    if (selectionFrameScreen.length < 2) return null;
     return {
-      x: selectionScreen.x + selectionScreen.width / 2,
-      y: selectionScreen.y - 31,
+      x: (selectionFrameScreen[0].x + selectionFrameScreen[1].x) / 2,
+      y: (selectionFrameScreen[0].y + selectionFrameScreen[1].y) / 2,
     };
-  }, [selectionScreen]);
+  }, [selectionFrameScreen]);
+
+  const rotateHandle = useMemo(() => {
+    if (!rotateFrameTop || !selectionFrameScreen.length) return null;
+    const center = {
+      x: selectionFrameScreen.reduce((sum, point) => sum + point.x, 0) / selectionFrameScreen.length,
+      y: selectionFrameScreen.reduce((sum, point) => sum + point.y, 0) / selectionFrameScreen.length,
+    };
+    const dx = rotateFrameTop.x - center.x;
+    const dy = rotateFrameTop.y - center.y;
+    const length = Math.max(0.0001, Math.hypot(dx, dy));
+    return {
+      x: rotateFrameTop.x + (dx / length) * 31,
+      y: rotateFrameTop.y + (dy / length) * 31,
+    };
+  }, [rotateFrameTop, selectionFrameScreen]);
 
   const hitRotateHandle = useCallback(
     (screen: Point): boolean => {
@@ -404,21 +434,24 @@ export default function CanvasStage(props: CanvasStageProps) {
       project.height * view.scale - 1,
     );
 
-    if (selectedObjects.length && editable && selectionScreen) {
-      const pad = 7;
+    if (selectedObjects.length && editable && selectionFrameScreen.length) {
       ctx.save();
       if (selectedObjects.length > 1) {
         ctx.strokeStyle = 'rgba(87, 245, 210, 0.35)';
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 4]);
         for (const object of selectedObjects) {
-          const bounds = objectBounds(object);
-          ctx.strokeRect(
-            view.x + bounds.x * view.scale,
-            view.y + bounds.y * view.scale,
-            bounds.width * view.scale,
-            bounds.height * view.scale,
-          );
+          const frame = objectFramePoints(object, 2 / view.scale).map(point => ({
+            x: view.x + point.x * view.scale,
+            y: view.y + point.y * view.scale,
+          }));
+          ctx.beginPath();
+          ctx.moveTo(frame[0].x, frame[0].y);
+          for (let index = 1; index < frame.length; index++) {
+            ctx.lineTo(frame[index].x, frame[index].y);
+          }
+          ctx.closePath();
+          ctx.stroke();
         }
       }
       ctx.strokeStyle = '#57f5d2';
@@ -426,12 +459,13 @@ export default function CanvasStage(props: CanvasStageProps) {
       ctx.setLineDash([6, 4]);
       ctx.shadowColor = 'rgba(87, 245, 210, 0.35)';
       ctx.shadowBlur = 8;
-      ctx.strokeRect(
-        selectionScreen.x - pad,
-        selectionScreen.y - pad,
-        selectionScreen.width + pad * 2,
-        selectionScreen.height + pad * 2,
-      );
+      ctx.beginPath();
+      ctx.moveTo(selectionFrameScreen[0].x, selectionFrameScreen[0].y);
+      for (let index = 1; index < selectionFrameScreen.length; index++) {
+        ctx.lineTo(selectionFrameScreen[index].x, selectionFrameScreen[index].y);
+      }
+      ctx.closePath();
+      ctx.stroke();
       ctx.restore();
 
       for (const handle of handlePoints) {
@@ -445,17 +479,13 @@ export default function CanvasStage(props: CanvasStageProps) {
       }
     }
 
-    if (selectedObjects.length && editable && selectionScreen && rotateHandle) {
-      const topCenter = {
-        x: selectionScreen.x + selectionScreen.width / 2,
-        y: selectionScreen.y - 7,
-      };
+    if (selectedObjects.length && editable && rotateFrameTop && rotateHandle) {
       ctx.save();
       ctx.strokeStyle = 'rgba(87, 245, 210, 0.7)';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(topCenter.x, topCenter.y);
-      ctx.lineTo(rotateHandle.x, rotateHandle.y + 7);
+      ctx.moveTo(rotateFrameTop.x, rotateFrameTop.y);
+      ctx.lineTo(rotateHandle.x, rotateHandle.y);
       ctx.stroke();
 
       ctx.fillStyle = '#0b332a';
@@ -516,10 +546,11 @@ export default function CanvasStage(props: CanvasStageProps) {
     project.background,
     project.height,
     project.width,
+    rotateFrameTop,
     rotateHandle,
     scene,
     selectedObjects,
-    selectionScreen,
+    selectionFrameScreen,
     size.height,
     size.width,
     view,
@@ -569,6 +600,8 @@ export default function CanvasStage(props: CanvasStageProps) {
 
       const handle = hitHandle(screen);
       if (handle && selectionBounds && selectedObjects.length) {
+        const single = selectedObjects.length === 1;
+        const rotation = single ? selectedObjects[0].rotation || 0 : 0;
         onBeginEdit();
         interactionRef.current = {
           mode: 'resize',
@@ -577,7 +610,9 @@ export default function CanvasStage(props: CanvasStageProps) {
             id: object.id,
             points: object.points.map(item => ({ ...item })),
           })),
-          bounds: selectionBounds,
+          bounds: single ? baseObjectBounds(selectedObjects[0]) : selectionBounds,
+          rotation,
+          local: single && rotation !== 0,
           moved: false,
         };
         return;
@@ -727,7 +762,7 @@ export default function CanvasStage(props: CanvasStageProps) {
     }
 
     if (interaction.mode === 'resize') {
-      const { bounds, handle, originals } = interaction;
+      const { bounds, handle, originals, rotation, local } = interaction;
       const anchor = {
         x: handle === 'nw' || handle === 'sw' ? bounds.x + bounds.width : bounds.x,
         y: handle === 'nw' || handle === 'ne' ? bounds.y + bounds.height : bounds.y,
@@ -736,8 +771,43 @@ export default function CanvasStage(props: CanvasStageProps) {
         x: handle === 'nw' || handle === 'sw' ? bounds.x : bounds.x + bounds.width,
         y: handle === 'nw' || handle === 'ne' ? bounds.y : bounds.y + bounds.height,
       };
-      let scaleX = (point.x - anchor.x) / Math.max(1, corner.x - anchor.x);
-      let scaleY = (point.y - anchor.y) / Math.max(1, corner.y - anchor.y);
+
+      if (local) {
+        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        const localPoint = rotatePoint(point, center, -rotation);
+        const spanX = corner.x - anchor.x;
+        const spanY = corner.y - anchor.y;
+        let scaleX = Math.abs(spanX) < 0.0001 ? 1 : (localPoint.x - anchor.x) / spanX;
+        let scaleY = Math.abs(spanY) < 0.0001 ? 1 : (localPoint.y - anchor.y) / spanY;
+        if (Math.abs(scaleX) < 0.04) scaleX = Math.sign(scaleX || 1) * 0.04;
+        if (Math.abs(scaleY) < 0.04) scaleY = Math.sign(scaleY || 1) * 0.04;
+        interaction.moved = true;
+
+        const scaled = scalePointsAround(originals[0].points, anchor, scaleX, scaleY);
+        const newBounds = boundsOfPoints(scaled);
+        const newCenter = {
+          x: newBounds.x + newBounds.width / 2,
+          y: newBounds.y + newBounds.height / 2,
+        };
+        const originalAnchorWorld = rotatePoint(anchor, center, rotation);
+        const newAnchorWorld = rotatePoint(anchor, newCenter, rotation);
+        onUpdateObjects([
+          {
+            id: originals[0].id,
+            points: transformPoints(
+              scaled,
+              originalAnchorWorld.x - newAnchorWorld.x,
+              originalAnchorWorld.y - newAnchorWorld.y,
+            ),
+          },
+        ]);
+        return;
+      }
+
+      const spanX = corner.x - anchor.x;
+      const spanY = corner.y - anchor.y;
+      let scaleX = Math.abs(spanX) < 0.0001 ? 1 : (point.x - anchor.x) / spanX;
+      let scaleY = Math.abs(spanY) < 0.0001 ? 1 : (point.y - anchor.y) / spanY;
       if (Math.abs(scaleX) < 0.04) scaleX = Math.sign(scaleX || 1) * 0.04;
       if (Math.abs(scaleY) < 0.04) scaleY = Math.sign(scaleY || 1) * 0.04;
       interaction.moved = true;

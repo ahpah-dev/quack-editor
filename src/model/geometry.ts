@@ -68,20 +68,23 @@ export function rotatePointsAround(points: Point[], center: Point, degrees: numb
   return points.map(point => rotatePoint(point, center, degrees));
 }
 
+export function objectFramePoints(object: ShapeObject, padding = 0): Point[] {
+  const base = baseObjectBounds(object);
+  const center = { x: base.x + base.width / 2, y: base.y + base.height / 2 };
+  const rotation = object.rotation || 0;
+  return [
+    { x: base.x - padding, y: base.y - padding },
+    { x: base.x + base.width + padding, y: base.y - padding },
+    { x: base.x + base.width + padding, y: base.y + base.height + padding },
+    { x: base.x - padding, y: base.y + base.height + padding },
+  ].map(point => rotatePoint(point, center, rotation));
+}
+
 export function objectBounds(object: ShapeObject): Bounds {
   const base = baseObjectBounds(object);
   const rotation = object.rotation || 0;
   if (!rotation) return base;
-
-  const center = { x: base.x + base.width / 2, y: base.y + base.height / 2 };
-  const corners = [
-    { x: base.x, y: base.y },
-    { x: base.x + base.width, y: base.y },
-    { x: base.x + base.width, y: base.y + base.height },
-    { x: base.x, y: base.y + base.height },
-  ].map(point => rotatePoint(point, center, rotation));
-
-  return boundsOfPoints(corners);
+  return boundsOfPoints(objectFramePoints(object));
 }
 
 export function centerOfPoints(points: Point[]): Point {

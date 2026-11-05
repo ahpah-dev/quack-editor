@@ -53,7 +53,9 @@ Rotate a part or a whole selection with the handle or precision buttons:
   while playing, and the setting is remembered between sessions.
 - **Free rotation**: drag the round handle above the selection or use the ±15°/±90°
   controls in the studio panel. Rotation works on a single part or a whole
-  multi-selection, persists in the project file, and interpolates through morphs.
+  multi-selection, persists in the project file, and interpolates through morphs. The
+  selection frame rotates with the shape and stays tight instead of expanding to a
+  larger axis-aligned box.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity
