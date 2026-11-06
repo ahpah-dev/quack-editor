@@ -60,6 +60,12 @@ MP4 export is rendered offline at 2× resolution with H.264:
   multi-selection, persists in the project file, and interpolates through morphs. The
   selection frame rotates with the shape and stays tight instead of expanding to a
   larger axis-aligned box.
+- **Custom audio**: import MP3, WAV, M4A, or OGG, see its waveform, adjust volume and
+  start frame, and hear it stay in sync during preview. Audio is stored in the project
+  file and included in MP4 exports as AAC.
+- **Timeline mode**: switch from keyframe cards to an NLE-style frame ruler with a
+  draggable playhead, draggable keyframes, frame ticks, and an aligned audio waveform.
+  Pin the current playhead position as a new keyframe to land on the beat.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity
@@ -72,7 +78,7 @@ MP4 export is rendered offline at 2× resolution with H.264:
 - **Readable project files** in JSON with the `.quack` extension.
 - **High-quality MP4 export**: true H.264 encoding through WebCodecs, rendered offline
   frame by frame at up to 2× project resolution (capped at 3840 px) with up to an
-  18 Mbps variable bitrate and frame-accurate timing.
+  18 Mbps variable bitrate, frame-accurate timing, and AAC audio when a track is loaded.
 - **PNG still export** at 2× project resolution.
 - **WebM fallback** using the browser’s native MediaRecorder.
 - **Responsive studio**: the controls become a slide-over drawer on narrow screens.

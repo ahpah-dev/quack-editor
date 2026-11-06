@@ -34,6 +34,15 @@ export interface Keyframe {
   objects: ShapeObject[];
 }
 
+export interface AudioTrack {
+  id: string;
+  name: string;
+  dataUrl: string;
+  duration: number;
+  volume: number;
+  offset: number;
+}
+
 export interface Project {
   format: 'quack-project';
   version: 1;
@@ -43,6 +52,7 @@ export interface Project {
   fps: number;
   background: string;
   keyframes: Keyframe[];
+  audio?: AudioTrack | null;
   autoTween: boolean;
   shapeMorph: boolean;
   loop: boolean;

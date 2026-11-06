@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Notice, Project, ShapeObject, Tool } from './types';
+import {
+  createAudioTrack,
+  decodeAudioDataUrl,
+  peaksFromBuffer,
+} from './model/audio';
 import { useProjectHistory } from './hooks/useProjectHistory';
 import {
   createDemoProject,
@@ -101,6 +106,11 @@ export default function App() {
     return Number.isFinite(stored) && stored >= 1 && stored <= 3 ? stored : 2;
   });
   const [playing, setPlaying] = useState(false);
+  const [timelineMode, setTimelineMode] = useState(
+    () => localStorage.getItem('quack.timelineMode.v1') === 'nle',
+  );
+  const [audioPeaks, setAudioPeaks] = useState<number[]>([]);
+  const [audioBusy, setAudioBusy] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(() => localStorage.getItem(WELCOME_KEY) !== 'yes');
   const [exportOpen, setExportOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
@@ -111,6 +121,10 @@ export default function App() {
   const [exportProgress, setExportProgress] = useState(0);
   const [exportError, setExportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const audioStartedRef = useRef(false);
   const noticeId = useRef(1);
 
   const duration = projectDuration(project);
@@ -176,6 +190,86 @@ export default function App() {
     localStorage.setItem('quack.onionSkin.v1', String(onionSkin));
     localStorage.setItem('quack.onionRange.v1', String(onionRange));
   }, [onionRange, onionSkin]);
+
+  useEffect(() => {
+    localStorage.setItem('quack.timelineMode.v1', timelineMode ? 'nle' : 'cards');
+  }, [timelineMode]);
+
+  useEffect(() => {
+    const track = project.audio;
+    audioStartedRef.current = false;
+    setAudioPeaks([]);
+    audioBufferRef.current = null;
+
+    if (!track) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      return undefined;
+    }
+
+    const element = new Audio(track.dataUrl);
+    element.preload = 'auto';
+    element.volume = track.volume;
+    audioRef.current = element;
+    let cancelled = false;
+
+    decodeAudioDataUrl(track.dataUrl)
+      .then(buffer => {
+        if (cancelled) return;
+        audioBufferRef.current = buffer;
+        setAudioPeaks(peaksFromBuffer(buffer));
+      })
+      .catch(error => console.warn('Could not decode the audio waveform.', error));
+
+    return () => {
+      cancelled = true;
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+      if (audioRef.current === element) audioRef.current = null;
+      audioBufferRef.current = null;
+    };
+  }, [project.audio?.dataUrl]);
+
+  useEffect(() => {
+    if (audioRef.current && project.audio) {
+      audioRef.current.volume = project.audio.volume;
+    }
+  }, [project.audio?.volume]);
+
+  useEffect(() => {
+    const element = audioRef.current;
+    const track = project.audio;
+    if (!element || !track) return;
+
+    if (!playing) {
+      element.pause();
+      audioStartedRef.current = false;
+      return;
+    }
+
+    const timelineTime = (currentFrame - 1) / project.fps;
+    if (currentFrame === 1) audioStartedRef.current = false;
+
+    if (timelineTime < track.offset - 0.001) {
+      element.pause();
+      audioStartedRef.current = false;
+      return;
+    }
+
+    if (!audioStartedRef.current) {
+      const target = Math.max(0, timelineTime - track.offset);
+      try {
+        element.currentTime = target;
+      } catch {
+        // Metadata may still be loading; play will follow once ready.
+      }
+      void element.play().catch(() => {
+        // Browsers can block audio until a direct gesture; playback still works visually.
+      });
+      audioStartedRef.current = true;
+    }
+  }, [currentFrame, playing, project.audio, project.fps]);
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -261,8 +355,76 @@ export default function App() {
     notify(`Keyframe ${activeKeyframe.at} removed.`, 'ink');
   };
 
+  const moveKeyframe = (id: string, desiredFrame: number) => {
+    const sorted = project.keyframes.slice().sort((a, b) => a.at - b.at);
+    const index = sorted.findIndex(keyframe => keyframe.id === id);
+    if (index === -1) return;
+    const previous = sorted[index - 1];
+    const next = sorted[index + 1];
+    const minFrame = previous ? previous.at + 1 : 1;
+    const maxFrame = next ? next.at - 1 : duration;
+    const target = Math.max(minFrame, Math.min(maxFrame, Math.round(desiredFrame)));
+    if (target === sorted[index].at) return;
+
+    setPlaying(false);
+    updateLive(draft => ({
+      ...draft,
+      keyframes: draft.keyframes
+        .map(keyframe => (keyframe.id === id ? { ...keyframe, at: target } : keyframe))
+        .sort((a, b) => a.at - b.at),
+    }));
+    setCurrentFrame(target);
+  };
+
   const updateProject = (patch: Partial<Project>) => {
     commit(draft => ({ ...draft, ...patch }));
+  };
+
+  const importAudio = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      notify('Keep audio under 25 MB so the project stays portable.', 'amber');
+      return;
+    }
+    setAudioBusy(true);
+    try {
+      const { track, buffer } = await createAudioTrack(file);
+      audioBufferRef.current = buffer;
+      setAudioPeaks(peaksFromBuffer(buffer));
+      commit(draft => ({ ...draft, audio: track }));
+      setTimelineMode(true);
+      notify(`"${track.name}" added. Drag the playhead to sync your frames.`, 'mint');
+    } catch (error) {
+      console.error(error);
+      notify('Could not decode that audio. Try MP3, WAV, M4A, or OGG.', 'coral');
+    } finally {
+      setAudioBusy(false);
+    }
+  };
+
+  const removeAudio = () => {
+    if (!project.audio) return;
+    commit(draft => ({ ...draft, audio: null }));
+    setAudioPeaks([]);
+    audioBufferRef.current = null;
+    notify('Audio removed. Your frames are unchanged.', 'ink');
+  };
+
+  const updateAudioVolume = (volume: number) => {
+    if (!project.audio) return;
+    commit(draft => ({
+      ...draft,
+      audio: draft.audio ? { ...draft.audio, volume: Math.max(0, Math.min(1, volume)) } : null,
+    }));
+  };
+
+  const updateAudioOffset = (frames: number) => {
+    if (!project.audio) return;
+    const offset = Math.max(0, frames) / project.fps;
+    commit(draft => ({
+      ...draft,
+      audio: draft.audio ? { ...draft.audio, offset } : null,
+    }));
   };
 
   const updateSelected = (patch: Partial<ShapeObject>) => {
@@ -516,6 +678,37 @@ export default function App() {
       return;
     }
 
+    let audioBuffer = project.audio ? audioBufferRef.current : null;
+    if (project.audio && !audioBuffer) {
+      try {
+        audioBuffer = await decodeAudioDataUrl(project.audio.dataUrl);
+        audioBufferRef.current = audioBuffer;
+      } catch (error) {
+        console.warn('Could not prepare audio for MP4 export.', error);
+      }
+    }
+
+    let audioConfig: AudioEncoderConfig | null = null;
+    let audioChannels = 2;
+    if (project.audio && audioBuffer && 'AudioEncoder' in window) {
+      const channels = Math.max(1, Math.min(2, audioBuffer.numberOfChannels));
+      const config: AudioEncoderConfig = {
+        codec: 'mp4a.40.2',
+        sampleRate: audioBuffer.sampleRate,
+        numberOfChannels: channels,
+        bitrate: 192_000,
+      };
+      try {
+        const support = await AudioEncoder.isConfigSupported(config);
+        if (support.supported) {
+          audioConfig = support.config || config;
+          audioChannels = channels;
+        }
+      } catch {
+        audioConfig = null;
+      }
+    }
+
     setExporting(true);
     const canvas = document.createElement('canvas');
     canvas.width = choice.width;
@@ -536,6 +729,15 @@ export default function App() {
         height: choice.height,
         frameRate: project.fps,
       },
+      ...(audioConfig
+        ? {
+            audio: {
+              codec: 'aac' as const,
+              numberOfChannels: audioChannels,
+              sampleRate: audioConfig.sampleRate,
+            },
+          }
+        : {}),
       fastStart: 'in-memory',
     });
 
@@ -547,8 +749,20 @@ export default function App() {
       },
     });
 
+    let audioEncoder: AudioEncoder | null = null;
+    let audioEncoderError: Error | null = null;
+    if (audioConfig) {
+      audioEncoder = new AudioEncoder({
+        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+        error: error => {
+          audioEncoderError = error;
+        },
+      });
+    }
+
     try {
       encoder.configure(choice.config);
+      if (audioEncoder && audioConfig) audioEncoder.configure(audioConfig);
       ctx.setTransform(choice.scaleX, 0, 0, choice.scaleY, 0, 0);
 
       const frameCount = duration;
@@ -571,9 +785,57 @@ export default function App() {
         setExportProgress(5 + (frame / frameCount) * 90);
       }
 
-      setExportProgress(96);
+      setExportProgress(95);
       await encoder.flush();
       if (encoderError) throw encoderError;
+
+      let includedAudio = false;
+      if (audioEncoder && audioConfig && audioBuffer && project.audio) {
+        const sampleRate = audioConfig.sampleRate;
+        const totalSamples = Math.ceil((duration / project.fps) * sampleRate);
+        const blockSize = 1024;
+        const sourceChannels = Array.from({ length: audioChannels }, (_, channel) =>
+          audioBuffer.getChannelData(Math.min(channel, audioBuffer.numberOfChannels - 1)),
+        );
+
+        for (let start = 0; start < totalSamples; start += blockSize) {
+          const frames = Math.min(blockSize, totalSamples - start);
+          const planar = new Float32Array(frames * audioChannels);
+          for (let channel = 0; channel < audioChannels; channel++) {
+            const source = sourceChannels[channel];
+            const base = channel * frames;
+            for (let index = 0; index < frames; index++) {
+              const timelineTime = (start + index) / sampleRate;
+              const sourceTime = timelineTime - project.audio.offset;
+              if (sourceTime < 0 || sourceTime >= audioBuffer.duration) continue;
+              const sampleIndex = Math.min(
+                source.length - 1,
+                Math.max(0, Math.floor(sourceTime * audioBuffer.sampleRate)),
+              );
+              planar[base + index] = (source[sampleIndex] || 0) * project.audio.volume;
+            }
+          }
+
+          const audioData = new AudioData({
+            format: 'f32-planar',
+            sampleRate,
+            numberOfFrames: frames,
+            numberOfChannels: audioChannels,
+            timestamp: Math.round((start / sampleRate) * 1_000_000),
+            data: planar,
+          });
+          audioEncoder.encode(audioData);
+          audioData.close();
+          while (audioEncoder.encodeQueueSize > 8) {
+            await new Promise(resolve => window.setTimeout(resolve, 4));
+          }
+          setExportProgress(95 + (start / Math.max(1, totalSamples)) * 4);
+        }
+
+        await audioEncoder.flush();
+        if (audioEncoderError) throw audioEncoderError;
+        includedAudio = true;
+      }
 
       muxer.finalize();
       const buffer = target.buffer;
@@ -585,8 +847,8 @@ export default function App() {
       setExporting(false);
       setExportOpen(false);
       notify(
-        `High-quality MP4 exported at ${choice.width}×${choice.height}.`,
-        'mint',
+        `High-quality MP4 exported at ${choice.width}×${choice.height}${includedAudio ? ' with audio' : ''}.`,
+        includedAudio || !project.audio ? 'mint' : 'amber',
       );
     } catch (error) {
       console.error(error);
@@ -595,6 +857,11 @@ export default function App() {
     } finally {
       try {
         encoder.close();
+      } catch {
+        // Encoder may already be closed.
+      }
+      try {
+        audioEncoder?.close();
       } catch {
         // Encoder may already be closed.
       }
@@ -830,9 +1097,17 @@ export default function App() {
             currentFrame={currentFrame}
             playing={playing}
             canAdd={canAdd}
+            mode={timelineMode ? 'nle' : 'cards'}
+            audio={project.audio || null}
+            audioPeaks={audioPeaks}
+            onModeChange={mode => setTimelineMode(mode === 'nle')}
             onSelectFrame={selectFrame}
             onTogglePlay={togglePlay}
             onAddFrame={addFrame}
+            onPinKeyframe={pinKeyframe}
+            onMoveKeyframe={moveKeyframe}
+            onBeginEdit={beginTransaction}
+            onEndEdit={endTransaction}
             onDeleteKeyframe={deleteKeyframe}
           />
         </main>
@@ -860,6 +1135,11 @@ export default function App() {
           onUpdateProject={updateProject}
           onUpdateSelected={updateSelected}
           onRotateSelection={rotateSelection}
+          onAddAudio={() => audioInputRef.current?.click()}
+          onRemoveAudio={removeAudio}
+          onAudioVolumeChange={updateAudioVolume}
+          onAudioOffsetChange={updateAudioOffset}
+          audioBusy={audioBusy}
           onAddFrame={addFrame}
           onPinKeyframe={pinKeyframe}
           onDeleteKeyframe={deleteKeyframe}
@@ -913,6 +1193,17 @@ export default function App() {
         onChange={event => {
           const file = event.target.files?.[0];
           if (file) void openProject(file);
+          event.target.value = '';
+        }}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        hidden
+        onChange={event => {
+          const file = event.target.files?.[0];
+          if (file) void importAudio(file);
           event.target.value = '';
         }}
       />

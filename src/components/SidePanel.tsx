@@ -1,6 +1,7 @@
 import type { Project, ShapeObject } from '../types';
 import { toHex } from '../model/colors';
 import { normalizeDegrees, objectBounds, unionBounds } from '../model/geometry';
+import { formatAudioTime } from '../model/audio';
 import { Icon } from './Icons';
 
 interface SidePanelProps {
@@ -20,6 +21,11 @@ interface SidePanelProps {
   onUpdateProject: (patch: Partial<Project>) => void;
   onUpdateSelected: (patch: Partial<ShapeObject>) => void;
   onRotateSelection: (degrees: number) => void;
+  onAddAudio: () => void;
+  onRemoveAudio: () => void;
+  onAudioVolumeChange: (volume: number) => void;
+  onAudioOffsetChange: (frames: number) => void;
+  audioBusy: boolean;
   onAddFrame: () => void;
   onPinKeyframe: () => void;
   onDeleteKeyframe: () => void;
@@ -119,6 +125,11 @@ export default function SidePanel(props: SidePanelProps) {
     onUpdateProject,
     onUpdateSelected,
     onRotateSelection,
+    onAddAudio,
+    onRemoveAudio,
+    onAudioVolumeChange,
+    onAudioOffsetChange,
+    audioBusy,
     onAddFrame,
     onPinKeyframe,
     onDeleteKeyframe,
@@ -221,6 +232,81 @@ export default function SidePanel(props: SidePanelProps) {
           </span>
           <Icon name="forward" size={16} />
         </button>
+      </section>
+
+      <section className="panel-card audio-card">
+        <div className="card-heading">
+          <span className="card-icon card-icon--audio"><Icon name="music" size={16} /></span>
+          <div>
+            <h2>Audio</h2>
+            <p>Bring your own track and sync it on the timeline.</p>
+          </div>
+        </div>
+
+        {project.audio ? (
+          <>
+            <div className="audio-file-row">
+              <span className="audio-file-icon"><Icon name="music" size={17} /></span>
+              <span className="audio-file-copy">
+                <strong>{project.audio.name}</strong>
+                <small>{formatAudioTime(project.audio.duration)} · starts at frame {Math.round(project.audio.offset * project.fps) + 1}</small>
+              </span>
+              <button type="button" className="icon-btn" onClick={onRemoveAudio} aria-label="Remove audio">
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
+
+            <div className="audio-control">
+              <div className="audio-control-label">
+                <span>Volume</span>
+                <strong>{Math.round(project.audio.volume * 100)}%</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(project.audio.volume * 100)}
+                onChange={event => onAudioVolumeChange(Number(event.target.value) / 100)}
+                aria-label="Audio volume"
+              />
+            </div>
+
+            <div className="audio-control audio-offset">
+              <div className="audio-control-label">
+                <span>Start at</span>
+                <strong>frame {Math.round(project.audio.offset * project.fps) + 1}</strong>
+              </div>
+              <input
+                type="number"
+                min="1"
+                max="9999"
+                value={Math.max(1, Math.round(project.audio.offset * project.fps) + 1)}
+                onChange={event =>
+                  onAudioOffsetChange((Number(event.target.value) || 1) - 1)
+                }
+                aria-label="Audio start frame"
+              />
+            </div>
+
+            <div className="audio-timeline-hint">
+              <Icon name="wave" size={14} />
+              Switch the timeline to Timeline view to line up the waveform.
+            </div>
+
+            <button type="button" className="soft-btn soft-btn--wide" onClick={onAddAudio} disabled={audioBusy}>
+              <Icon name="music" size={14} /> {audioBusy ? 'Reading audio…' : 'Replace audio'}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="audio-add" onClick={onAddAudio} disabled={audioBusy}>
+            <span className="audio-add-icon"><Icon name="plus" size={18} /></span>
+            <span>
+              <strong>{audioBusy ? 'Reading audio…' : 'Add audio track'}</strong>
+              <small>MP3, WAV, M4A, or OGG · under 25 MB</small>
+            </span>
+            <Icon name="forward" size={15} />
+          </button>
+        )}
       </section>
 
       {selectedObject && activeKeyframe ? (
@@ -465,7 +551,7 @@ export default function SidePanel(props: SidePanelProps) {
       <footer className="panel-footer">
         <span className="footer-duck">Q</span>
         <span>
-          Quack Editor <strong>1.4</strong><br />
+          Quack Editor <strong>1.5</strong><br />
           <small>From scratch · Unlicense</small>
         </span>
         <a

@@ -21,6 +21,8 @@ export type IconName =
   | 'copy'
   | 'image'
   | 'video'
+  | 'music'
+  | 'wave'
   | 'file'
   | 'save'
   | 'folder'
@@ -97,6 +99,10 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
       return <svg {...common}><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m4 16 4.5-4.5 3.2 3.2 2.6-2.6L20 17.8" /></svg>;
     case 'video':
       return <svg {...common}><rect x="3" y="5" width="13" height="14" rx="2.5" /><path d="m16 10 5-3v10l-5-3z" /></svg>;
+    case 'music':
+      return <svg {...common}><path d="M9 18V5l10-2v13" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></svg>;
+    case 'wave':
+      return <svg {...common}><path d="M3 12h3l2-5 3 10 3-13 3 15 2-7h2" /></svg>;
     case 'file':
       return <svg {...common}><path d="M6 3h8l4 4v14H6zM14 3v5h5M9 13h6M9 17h4" /></svg>;
     case 'save':

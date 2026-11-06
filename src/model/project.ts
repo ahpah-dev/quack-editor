@@ -1,4 +1,4 @@
-import type { Keyframe, Project, ShapeObject } from '../types';
+import type { AudioTrack, Keyframe, Project, ShapeObject } from '../types';
 import { createDemoDuck, demoStar } from './demo';
 import { uid } from './geometry';
 
@@ -84,7 +84,24 @@ export function createDemoProject(): Project {
 
 export function projectDuration(project: Project): number {
   const last = project.keyframes.reduce((max, frame) => Math.max(max, frame.at), 1);
-  return Math.max(24, last + 12);
+  const audioFrames = project.audio
+    ? Math.ceil((project.audio.offset + project.audio.duration) * project.fps)
+    : 0;
+  return Math.max(24, last + 12, audioFrames + 1);
+}
+
+function sanitizeAudio(value: unknown): AudioTrack | null {
+  if (!value || typeof value !== 'object') return null;
+  const audio = value as Partial<AudioTrack>;
+  if (typeof audio.dataUrl !== 'string' || !audio.dataUrl.startsWith('data:audio/')) return null;
+  return {
+    id: typeof audio.id === 'string' ? audio.id : uid('audio'),
+    name: typeof audio.name === 'string' ? audio.name : 'Audio track',
+    dataUrl: audio.dataUrl,
+    duration: Math.max(0.05, asNumber(audio.duration, 1)),
+    volume: Math.max(0, Math.min(1, asNumber(audio.volume, 0.8))),
+    offset: Math.max(0, asNumber(audio.offset, 0)),
+  };
 }
 
 export function keyframeAt(project: Project, frame: number): Keyframe | null {
@@ -225,6 +242,7 @@ export function parseProjectFile(text: string): Project {
     fps: Math.max(1, Math.min(60, Math.round(asNumber(project.fps, 24)))),
     background: typeof project.background === 'string' ? project.background : '#fffdf4',
     keyframes: deduped,
+    audio: sanitizeAudio((project as { audio?: unknown }).audio),
     autoTween: project.autoTween !== false,
     shapeMorph: project.shapeMorph !== false,
     loop: project.loop !== false,

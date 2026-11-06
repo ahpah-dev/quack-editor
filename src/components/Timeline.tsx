@@ -1,17 +1,26 @@
 import { useEffect, useRef } from 'react';
-import type { Project, ShapeObject } from '../types';
+import type { AudioTrack, Project, ShapeObject } from '../types';
 import { keyframeAt, projectDuration, sortedKeyframes } from '../model/project';
 import { renderThumbnail } from '../model/render';
 import { Icon } from './Icons';
+import NleTimeline from './NleTimeline';
 
 interface TimelineProps {
   project: Project;
   currentFrame: number;
   playing: boolean;
   canAdd: boolean;
+  mode: 'cards' | 'nle';
+  audio: AudioTrack | null;
+  audioPeaks: number[];
+  onModeChange: (mode: 'cards' | 'nle') => void;
   onSelectFrame: (frame: number) => void;
   onTogglePlay: () => void;
   onAddFrame: () => void;
+  onPinKeyframe: () => void;
+  onMoveKeyframe: (id: string, frame: number) => void;
+  onBeginEdit: () => void;
+  onEndEdit: () => void;
   onDeleteKeyframe: () => void;
 }
 
@@ -37,9 +46,16 @@ export default function Timeline(props: TimelineProps) {
     currentFrame,
     playing,
     canAdd,
+    mode,
+    audioPeaks,
+    onModeChange,
     onSelectFrame,
     onTogglePlay,
     onAddFrame,
+    onPinKeyframe,
+    onMoveKeyframe,
+    onBeginEdit,
+    onEndEdit,
     onDeleteKeyframe,
   } = props;
 
@@ -118,6 +134,22 @@ export default function Timeline(props: TimelineProps) {
             ) : (
               <span className="position-badge position-badge--preview">Preview</span>
             )}
+            <div className="timeline-mode-switch" role="group" aria-label="Timeline view">
+              <button
+                type="button"
+                className={mode === 'cards' ? 'is-active' : ''}
+                onClick={() => onModeChange('cards')}
+              >
+                Cards
+              </button>
+              <button
+                type="button"
+                className={mode === 'nle' ? 'is-active' : ''}
+                onClick={() => onModeChange('nle')}
+              >
+                <Icon name="video" size={12} /> Timeline
+              </button>
+            </div>
           </div>
         </div>
 
@@ -179,17 +211,33 @@ export default function Timeline(props: TimelineProps) {
         </div>
       </div>
 
-      <div className="timeline-strip-wrap">
-        <div className="timeline-strip" ref={scrollRef}>
-          {cells}
+      {mode === 'nle' ? (
+        <NleTimeline
+          project={project}
+          currentFrame={currentFrame}
+          playing={playing}
+          audioPeaks={audioPeaks}
+          onSelectFrame={onSelectFrame}
+          onPinKeyframe={onPinKeyframe}
+          onMoveKeyframe={onMoveKeyframe}
+          onBeginEdit={onBeginEdit}
+          onEndEdit={onEndEdit}
+        />
+      ) : (
+        <div className="timeline-strip-wrap">
+          <div className="timeline-strip" ref={scrollRef}>
+            {cells}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="timeline-footer">
         <span>
-          {activeKeyframe
-            ? project.autoTween ? 'Click any frame to scrub. Edit a keyframe and the in-betweens follow.' : 'Auto Tween is off. Frames cut straight between keyframes.'
-            : 'You are previewing an automatic in-between. Pin it to make it editable.'}
+          {mode === 'nle'
+            ? 'Drag keyframes to retime them against the audio. Click the ruler to move the playhead.'
+            : activeKeyframe
+              ? project.autoTween ? 'Click any frame to scrub. Edit a keyframe and the in-betweens follow.' : 'Auto Tween is off. Frames cut straight between keyframes.'
+              : 'You are previewing an automatic in-between. Pin it to make it editable.'}
         </span>
         <span className="timeline-shortcuts">
           <kbd>Space</kbd> play

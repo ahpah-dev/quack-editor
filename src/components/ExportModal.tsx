@@ -20,7 +20,7 @@ const options = [
     icon: 'video' as const,
     title: 'High-quality MP4',
     text: 'H.264 at up to 2× project resolution with a high-quality bitrate.',
-    tag: 'MP4 · H.264 · HIGH BITRATE',
+    tag: 'MP4 · H.264 + AAC',
   },
   {
     id: 'png',
@@ -33,8 +33,8 @@ const options = [
     id: 'webm',
     icon: 'video' as const,
     title: 'WebM fallback',
-    text: 'A quick realtime recording for broad browser support.',
-    tag: 'WEBM · REAL TIME',
+    text: 'A quick video-only realtime recording for broad browser support.',
+    tag: 'WEBM · VIDEO ONLY',
   },
   {
     id: 'project',
@@ -102,7 +102,7 @@ export default function ExportModal(props: ExportModalProps) {
         {error && <div className="export-error">{error}</div>}
 
         <div className="modal-foot">
-          <span>MP4 is rendered offline frame by frame, so timing stays exact.</span>
+          <span>MP4 renders offline frame by frame and includes your audio track.</span>
           <button type="button" className="soft-btn" onClick={onClose}>Cancel</button>
         </div>
       </div>
