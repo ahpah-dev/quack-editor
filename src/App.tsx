@@ -327,6 +327,15 @@ export default function App() {
     );
   };
 
+  const extendAnimation = (amount: number) => {
+    const frames = Math.max(1, Math.min(2000, Math.round(amount)));
+    if (!Number.isFinite(frames)) return;
+    setPlaying(false);
+    const endFrame = duration + frames;
+    commit(draft => ({ ...draft, endFrame }));
+    notify(`Animation extended by ${frames} frames to frame ${endFrame}.`, 'mint');
+  };
+
   const pinKeyframe = () => {
     if (activeKeyframe) return;
     const objects = normalizedObjects(sceneAt(project, currentFrame));
@@ -1104,6 +1113,7 @@ export default function App() {
             onSelectFrame={selectFrame}
             onTogglePlay={togglePlay}
             onAddFrame={addFrame}
+            onExtend={extendAnimation}
             onPinKeyframe={pinKeyframe}
             onMoveKeyframe={moveKeyframe}
             onBeginEdit={beginTransaction}

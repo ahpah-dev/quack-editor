@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AudioTrack, Project, ShapeObject } from '../types';
 import { keyframeAt, projectDuration, sortedKeyframes } from '../model/project';
 import { renderThumbnail } from '../model/render';
@@ -17,6 +17,7 @@ interface TimelineProps {
   onSelectFrame: (frame: number) => void;
   onTogglePlay: () => void;
   onAddFrame: () => void;
+  onExtend: (frames: number) => void;
   onPinKeyframe: () => void;
   onMoveKeyframe: (id: string, frame: number) => void;
   onBeginEdit: () => void;
@@ -52,6 +53,7 @@ export default function Timeline(props: TimelineProps) {
     onSelectFrame,
     onTogglePlay,
     onAddFrame,
+    onExtend,
     onPinKeyframe,
     onMoveKeyframe,
     onBeginEdit,
@@ -61,6 +63,9 @@ export default function Timeline(props: TimelineProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef<HTMLButtonElement>(null);
+  const extendRef = useRef<HTMLDivElement>(null);
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendAmount, setExtendAmount] = useState('24');
   const duration = projectDuration(project);
   const keyframes = sortedKeyframes(project);
   const activeKeyframe = keyframeAt(project, currentFrame);
@@ -73,6 +78,32 @@ export default function Timeline(props: TimelineProps) {
     const target = element.offsetLeft - scroller.clientWidth / 2 + element.clientWidth / 2;
     scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
   }, [currentFrame]);
+
+  useEffect(() => {
+    if (!extendOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!extendRef.current?.contains(event.target as Node)) setExtendOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExtendOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [extendOpen]);
+
+  const applyExtend = (value: number) => {
+    const amount = Math.max(1, Math.min(2000, Math.round(value)));
+    if (!Number.isFinite(amount)) return;
+    onExtend(amount);
+    setExtendOpen(false);
+  };
+
+  const customAmount = Number(extendAmount);
+  const customValid = Number.isFinite(customAmount) && customAmount >= 1;
 
   const cells = [];
   for (let frame = 1; frame <= duration; frame++) {
@@ -197,6 +228,67 @@ export default function Timeline(props: TimelineProps) {
           >
             <Icon name="trash" size={16} />
           </button>
+
+          <div className="extend-wrap" ref={extendRef}>
+            <button
+              type="button"
+              className="extend-btn"
+              onClick={() => setExtendOpen(open => !open)}
+              aria-haspopup="dialog"
+              aria-expanded={extendOpen}
+              title="Add more frames to the end of the animation"
+            >
+              <Icon name="plus" size={14} />
+              Extend
+            </button>
+
+            {extendOpen && (
+              <div className="extend-popover" role="dialog" aria-label="Extend animation">
+                <span className="eyebrow">Extend animation</span>
+                <strong className="extend-title">Add more screen time</strong>
+                <p>Current end · frame {duration}</p>
+
+                <div className="extend-presets">
+                  {[12, 24, 48, 96].map(amount => (
+                    <button key={amount} type="button" onClick={() => applyExtend(amount)}>
+                      <span>+{amount}</span>
+                      <small>frames</small>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="extend-custom">
+                  <label>
+                    <span>Custom</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="2000"
+                      value={extendAmount}
+                      onChange={event => setExtendAmount(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' && customValid) applyExtend(customAmount);
+                      }}
+                      aria-label="Custom frames to extend"
+                    />
+                    <small>frames</small>
+                  </label>
+                  <button
+                    type="button"
+                    className="extend-apply"
+                    onClick={() => applyExtend(customAmount)}
+                    disabled={!customValid}
+                  >
+                    Extend
+                  </button>
+                </div>
+
+                <div className="extend-preview">
+                  New end · frame {duration + (customValid ? Math.round(customAmount) : 0)}
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"

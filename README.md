@@ -66,6 +66,9 @@ MP4 export is rendered offline at 2× resolution with H.264:
 - **Timeline mode**: switch from keyframe cards to an NLE-style frame ruler with a
   draggable playhead, draggable keyframes, frame ticks, and an aligned audio waveform.
   Pin the current playhead position as a new keyframe to land on the beat.
+- **Extend animation**: click Extend, then choose +12, +24, +48, +96, or a custom
+  number of frames. The new end frame is saved with the project, respects the audio
+  length, and is undoable.
 - **Automatic in-betweening** with a smoothstep time curve.
 - **True vector shape morphing**: contours are resampled, winding-aligned, rotated to
   the best seam, and interpolated point by point. Fill, stroke, width, and opacity

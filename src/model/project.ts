@@ -87,7 +87,10 @@ export function projectDuration(project: Project): number {
   const audioFrames = project.audio
     ? Math.ceil((project.audio.offset + project.audio.duration) * project.fps)
     : 0;
-  return Math.max(24, last + 12, audioFrames + 1);
+  const explicitEnd = project.endFrame
+    ? Math.max(1, Math.round(project.endFrame))
+    : 0;
+  return Math.max(24, last + 12, audioFrames + 1, explicitEnd);
 }
 
 function sanitizeAudio(value: unknown): AudioTrack | null {
@@ -243,6 +246,10 @@ export function parseProjectFile(text: string): Project {
     background: typeof project.background === 'string' ? project.background : '#fffdf4',
     keyframes: deduped,
     audio: sanitizeAudio((project as { audio?: unknown }).audio),
+    endFrame: Math.max(
+      24,
+      Math.round(asNumber((project as { endFrame?: unknown }).endFrame, 24)),
+    ),
     autoTween: project.autoTween !== false,
     shapeMorph: project.shapeMorph !== false,
     loop: project.loop !== false,

@@ -53,6 +53,7 @@ export interface Project {
   background: string;
   keyframes: Keyframe[];
   audio?: AudioTrack | null;
+  endFrame?: number;
   autoTween: boolean;
   shapeMorph: boolean;
   loop: boolean;

@@ -2,7 +2,7 @@
   "format": "quack-editor",
   "version": 1,
   "app": "Quack Editor",
-  "savedAt": "2026-11-06T09:32:09.664Z",
+  "savedAt": "2026-11-06T09:55:53.007Z",
   "project": {
     "format": "quack-project",
     "version": 1,
@@ -13,11 +13,11 @@
     "background": "#fffdf4",
     "keyframes": [
       {
-        "id": "key_mw4rzobw_ht61uc",
+        "id": "key_mw4su6ly_dcvhn0",
         "at": 1,
         "objects": [
           {
-            "id": "body_mw4rzobw_mcvjni",
+            "id": "body_mw4su6ly_qkmmi3",
             "kind": "path",
             "points": [
               {
@@ -509,7 +509,7 @@
             "opacity": 1
           },
           {
-            "id": "eye_mw4rzobw_che30h",
+            "id": "eye_mw4su6ly_78afu1",
             "kind": "ellipse",
             "points": [
               {
@@ -603,11 +603,11 @@
         ]
       },
       {
-        "id": "key_mw4rzobw_gee4rf",
+        "id": "key_mw4su6ly_s15083",
         "at": 13,
         "objects": [
           {
-            "id": "body_mw4rzobw_mcvjni",
+            "id": "body_mw4su6ly_qkmmi3",
             "kind": "star",
             "points": [
               {
@@ -659,7 +659,7 @@
             "opacity": 1
           },
           {
-            "id": "spark0_mw4rzobw_054dgr",
+            "id": "spark0_mw4su6ly_2dapw2",
             "kind": "star",
             "points": [
               {
@@ -711,7 +711,7 @@
             "opacity": 1
           },
           {
-            "id": "spark1_mw4rzobw_wtgmv5",
+            "id": "spark1_mw4su6ly_o8o6o4",
             "kind": "star",
             "points": [
               {
@@ -763,7 +763,7 @@
             "opacity": 1
           },
           {
-            "id": "spark2_mw4rzobw_46aj2k",
+            "id": "spark2_mw4su6ly_h22qvy",
             "kind": "star",
             "points": [
               {
